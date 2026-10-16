@@ -5,8 +5,9 @@ import { LocalPlayer } from './player.js';
 import { Audio } from './audio.js';
 import { Net } from './net.js';
 import { buildCart, addToCart, emptyCart } from './cart.js';
+import { DinnerView } from './dinner.js';
 import { SPAWN, inExitZone } from '../shared/map.js';
-import { PLAYER, JUMPSCARE_MS, TICK_RATE } from '../shared/constants.js';
+import { PLAYER, JUMPSCARE_MS, TICK_RATE, DINNER } from '../shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -34,6 +35,7 @@ const audio = new Audio();
 const myCart = buildCart();
 scene.add(myCart);
 const _cartPrev = new THREE.Vector3();
+const dinner = new DinnerView({ monster, audio, isTouch, toast: (t, ms) => toast(t, ms) });
 
 // El anfitrión no puede empezar hasta tener el monstruo cargado (el FBX pesa ~12 MB)
 $('loading').classList.remove('hidden');
@@ -93,6 +95,28 @@ $('btn-share').onclick = async () => {
   }
 };
 
+// ---- Elegir juego (lo decide el anfitrión) ----
+const MODE_TEXT = {
+  market: 'Coged la lista de la compra y salid sin que os atrape el monstruo.',
+  dinner: 'Comeos los guisantes sin que el del periódico os vea. Si os pilla, disparo. Gana quien limpie antes el plato.',
+};
+let currentMode = 'market';
+function showMode(mode, amHost) {
+  currentMode = mode;
+  $('btn-switch').textContent = mode === 'market' ? 'Jugar a La Cena' : 'Jugar al Supermercado';
+  $('btn-switch').classList.toggle('hidden', !amHost);
+  $('mode-market').classList.toggle('on', mode === 'market');
+  $('mode-dinner').classList.toggle('on', mode === 'dinner');
+  $('mode-market').disabled = $('mode-dinner').disabled = !amHost;
+  $('mode-desc').textContent = MODE_TEXT[mode];
+}
+$('btn-switch').onclick = () => {
+  net?.send({ t: 'mode', mode: currentMode === 'market' ? 'dinner' : 'market' });
+  net?.send({ t: 'start' });
+};
+$('mode-market').onclick = () => net?.send({ t: 'mode', mode: 'market' });
+$('mode-dinner').onclick = () => net?.send({ t: 'mode', mode: 'dinner' });
+
 function showMenuError(msg) {
   $('menu-error').textContent = msg;
 }
@@ -139,6 +163,7 @@ function onMessage(msg) {
       break;
     case 'lobby': {
       hostId = msg.host;
+      lastPlayers = msg.players;
       const ul = $('lobby-players');
       ul.innerHTML = '';
       for (const p of msg.players) {
@@ -148,6 +173,7 @@ function onMessage(msg) {
         ul.appendChild(li);
       }
       const amHost = hostId === myId;
+      showMode(msg.mode || 'market', amHost);
       $('btn-start').classList.toggle('hidden', !amHost);
       $('lobby-wait').classList.toggle('hidden', amHost);
       $('btn-again').classList.toggle('hidden', !amHost);
@@ -161,7 +187,17 @@ function onMessage(msg) {
       startRound(msg);
       break;
     case 'snap':
-      onSnapshot(msg);
+      if (dinner.active) {
+        if (msg.d) dinner.onSnap(msg.d, playerInfo(msg.players));
+        renderDinnerCount();
+      } else onSnapshot(msg);
+      break;
+    case 'shot':
+      dinner.onShot(msg.id);
+      if (msg.id !== myId) toast(`¡PUM! ${msg.name} ha caído`, 2500);
+      break;
+    case 'cleaned':
+      toast(msg.id === myId ? `¡Plato limpio! Quedas ${msg.place}º` : `${msg.name} ha limpiado el plato (${msg.place}º)`, 3000);
       break;
     case 'taken': {
       const it = items.get(msg.id);
@@ -197,12 +233,49 @@ function onMessage(msg) {
       }
       break;
     case 'end':
-      endRound(msg.result);
+      endRound(msg.result, msg.ranking);
       break;
   }
 }
 
+function playerInfo(list) {
+  return new Map(list.map((p) => [p.id, { name: p.name, color: p.color }]));
+}
+
+let lastPlayers = [];
+function startDinner(msg) {
+  phase = 'playing';
+  player.frozen = true;
+  document.exitPointerLock?.();
+  scare = null;
+  pendingEnd = null;
+  dinner.start(myId, msg.d, playerInfo(lastPlayers));
+  audio.flickerHum(true);
+  $('menu').classList.add('hidden');
+  $('end').classList.add('hidden');
+  $('hud').classList.add('hidden');
+  $('touch').classList.add('hidden');
+  $('dinner-ui').classList.remove('hidden');
+  renderDinnerCount();
+  toast('Carga guisantes mientras lee. Cuando baje el periódico: tenedor vacío y quieto.', 5000);
+}
+
+function renderDinnerCount() {
+  const me = dinner.mine();
+  if (!me) return;
+  $('dinner-count').textContent = me.place
+    ? `Plato limpio · ${me.place}º`
+    : me.alive ? `Plato: ${me.peas - me.fork} · Tenedor: ${me.fork}` : 'Eliminado';
+  $('dinner-buttons').classList.toggle('hidden', !me.alive || !!me.place);
+}
+
 function startRound(msg) {
+  if (msg.mode === 'dinner') return startDinner(msg);
+  if (dinner.active) {
+    dinner.stop(scene);
+    audio.flickerHum(false);
+    $('dinner-ui').classList.add('hidden');
+  }
   phase = 'playing';
   for (const it of items.values()) scene.remove(it.mesh);
   items = new Map();
@@ -238,12 +311,32 @@ function startRound(msg) {
 }
 
 let pendingEnd = null;
-function endRound(result) {
+function endDinner(ranking) {
+  phase = 'ended';
+  $('toast').style.opacity = 0;
+  $('dinner-ui').classList.add('hidden');
+  $('end').classList.remove('hidden');
+  const mine = ranking.find((r) => r.id === myId);
+  $('end-title').textContent = mine?.place === 1 ? 'PRIMERO' : mine?.place ? `${mine.rank}º PUESTO` : 'TE PILLARON';
+  $('end-text').textContent = 'Clasificación de la cena';
+  const ol = $('ranking');
+  ol.innerHTML = '';
+  for (const r of ranking) {
+    const li = document.createElement('li');
+    li.textContent = `${r.name}${r.id === myId ? ' (tú)' : ''}: ${r.place ? 'plato limpio' : `disparado (le quedaban ${r.left})`}`;
+    if (!r.place) li.classList.add('dead');
+    ol.appendChild(li);
+  }
+}
+
+function endRound(result, ranking) {
   // Si te acaban de atrapar, primero termina el susto
-  if (scare) {
-    pendingEnd = result;
+  if (scare || dinner.shot) {
+    pendingEnd = { result, ranking };
     return;
   }
+  $('ranking').classList.toggle('hidden', result !== 'dinner');
+  if (result === 'dinner') return endDinner(ranking);
   phase = 'ended';
   player.frozen = true;
   document.exitPointerLock?.();
@@ -451,7 +544,7 @@ function updateScare(dt) {
     scare = null;
     player.frozen = phase !== 'playing';
     if (pendingEnd) {
-      endRound(pendingEnd);
+      endRound(pendingEnd.result, pendingEnd.ranking);
       pendingEnd = null;
       return;
     }
@@ -471,11 +564,11 @@ player.onUse = () => {
 
 canvas.addEventListener('click', () => {
   audio.unlock();
-  if (!isTouch && phase === 'playing') canvas.requestPointerLock?.();
+  if (!isTouch && phase === 'playing' && !dinner.active) canvas.requestPointerLock?.();
 });
 document.addEventListener('pointerlockchange', updateClickToPlay);
 function updateClickToPlay() {
-  const show = !isTouch && phase === 'playing' && !scare && document.pointerLockElement !== canvas;
+  const show = !isTouch && phase === 'playing' && !scare && !dinner.active && document.pointerLockElement !== canvas;
   $('click-to-play').classList.toggle('hidden', !show);
   if (!isTouch && phase === 'playing' && !scare) player.frozen = !!show;
 }
@@ -503,6 +596,21 @@ const _v = new THREE.Vector3();
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05);
   const time = clock.elapsedTime;
+
+  if (dinner.active) {
+    const wasShot = !!dinner.shot;
+    dinner.update(dt, time);
+    if (wasShot && !dinner.shot) {
+      renderDinnerCount();
+      if (pendingEnd) {
+        endRound(pendingEnd.result, pendingEnd.ranking);
+        pendingEnd = null;
+      }
+    }
+    renderer.render(dinner.scene, dinner.camera);
+    requestAnimationFrame(frame);
+    return;
+  }
 
   if (scare) updateScare(dt);
   else player.update(dt);
@@ -618,7 +726,53 @@ function updateLamps(dt) {
   }
 }
 
+// ---- Controles de La Cena ----
+let loadTimer = null;
+function dinnerSend(t) {
+  if (dinner.active && phase === 'playing' && !dinner.shot) net?.send({ t });
+}
+function startLoading() {
+  dinnerSend('load');
+  clearInterval(loadTimer);
+  loadTimer = setInterval(() => dinnerSend('load'), DINNER.loadInterval * 1000 + 30);
+}
+function stopLoading() {
+  clearInterval(loadTimer);
+  loadTimer = null;
+}
+for (const [id, fn] of [['d-eat', () => dinnerSend('eat')], ['d-drop', () => dinnerSend('drop')]]) {
+  $(id).addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); audio.unlock(); fn(); });
+}
+// Cargar: un toque = un guisante; mantener pulsado = va cargando
+$('d-load').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); audio.unlock(); startLoading(); });
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('d-load').addEventListener(ev, stopLoading);
+addEventListener('keydown', (e) => {
+  if (!dinner.active || e.repeat) return;
+  if (e.code === 'Space') startLoading();
+  if (e.code === 'KeyE') dinnerSend('eat');
+  if (e.code === 'KeyQ') dinnerSend('drop');
+});
+addEventListener('keyup', (e) => { if (e.code === 'Space') stopLoading(); });
+// Mirar alrededor arrastrando (y en PC, clic corto en la pantalla = cargar)
+let dragging = null;
+canvas.addEventListener('pointerdown', (e) => {
+  if (!dinner.active) return;
+  dragging = { x: e.clientX, y: e.clientY, moved: 0 };
+});
+addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  const dx = e.clientX - dragging.x, dy = e.clientY - dragging.y;
+  dragging.moved += Math.abs(dx) + Math.abs(dy);
+  dragging.x = e.clientX;
+  dragging.y = e.clientY;
+  dinner.drag(dx, dy);
+});
+addEventListener('pointerup', () => {
+  if (dragging && dragging.moved < 6 && !isTouch) dinnerSend('load');
+  dragging = null;
+});
+
 // Acceso para depurar desde la consola del navegador
-window.__uc = { monster, player, camera, scene };
+window.__uc = { monster, player, camera, scene, dinner };
 
 frame();

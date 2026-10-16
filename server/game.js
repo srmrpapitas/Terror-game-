@@ -6,6 +6,7 @@ import {
 } from '../shared/map.js';
 import { PLAYER, MONSTER, TICK_RATE, MAX_PLAYERS, JUMPSCARE_MS } from '../shared/constants.js';
 import { findPath, clearPath } from './nav.js';
+import { Dinner } from './dinner.js';
 
 const DT = 1 / TICK_RATE;
 const PLAYER_COLORS = [0x4fc3f7, 0xffb74d, 0xaed581, 0xf06292];
@@ -19,6 +20,8 @@ export class Room {
     this.items = [];
     this.monster = null;
     this.hostId = null;
+    this.mode = 'market'; // market (supermercado) | dinner (la cena)
+    this.dinner = null;
     this.endTimer = 0;
     this.interval = setInterval(() => this.tick(), 1000 / TICK_RATE);
   }
@@ -40,13 +43,17 @@ export class Room {
     this.players.set(id, player);
     if (!this.hostId) this.hostId = id;
     send({ t: 'joined', code: this.code, id, host: this.hostId === id, color });
-    if (this.phase === 'playing') send(this.roundMessage());
+    if (this.phase === 'playing') {
+      this.dinner?.addSpectator(id);
+      send(this.roundMessage());
+    }
     this.broadcastLobby();
     return true;
   }
 
   removePlayer(id) {
     this.players.delete(id);
+    this.dinner?.remove(id);
     if (this.monster?.targetId === id) this.monster.targetId = null;
     if (this.hostId === id) this.hostId = this.players.keys().next().value ?? null;
     if (this.players.size === 0) {
@@ -64,6 +71,17 @@ export class Room {
     switch (msg.t) {
       case 'start':
         if (id === this.hostId && this.phase !== 'playing') this.startRound();
+        break;
+      case 'mode':
+        if (id === this.hostId && this.phase !== 'playing' && (msg.mode === 'market' || msg.mode === 'dinner')) {
+          this.mode = msg.mode;
+          this.broadcastLobby();
+        }
+        break;
+      case 'load':
+      case 'eat':
+      case 'drop':
+        if (this.phase === 'playing' && this.dinner) this.dinner.handle(id, msg);
         break;
       case 'state': {
         if (!Array.isArray(msg.p) || msg.p.length !== 3 || !msg.p.every(Number.isFinite)) return;
@@ -90,13 +108,18 @@ export class Room {
   // ---- Ronda ----
 
   startRound() {
+    if (this.mode === 'dinner') return this.startDinner();
+    this.dinner = null;
     const spots = [...ITEM_SPOTS].sort(() => Math.random() - 0.5);
     const products = [...PRODUCTS].sort(() => Math.random() - 0.5).slice(0, ITEMS_PER_ROUND);
     // Productos separados entre sí para obligar a recorrer la tienda
     const chosen = [];
-    for (const s of spots) {
-      if (chosen.length === products.length) break;
-      if (chosen.every((c) => Math.hypot(c.x - s.x, c.z - s.z) > 9)) chosen.push(s);
+    // Si no caben todos tan separados, se va bajando la distancia mínima
+    for (const minDist of [9, 7, 5, 0]) {
+      for (const s of spots) {
+        if (chosen.length === products.length) break;
+        if (chosen.every((c) => c !== s && Math.hypot(c.x - s.x, c.z - s.z) > minDist)) chosen.push(s);
+      }
     }
     this.items = products.map((prod, i) => ({
       id: i, name: prod.name, color: prod.color,
@@ -124,8 +147,20 @@ export class Room {
     this.broadcast(this.roundMessage());
   }
 
+  startDinner() {
+    for (const p of this.players.values()) p.alive = true;
+    this.monster = null;
+    this.items = [];
+    this.dinner = new Dinner(this);
+    this.phase = 'playing';
+    this.endTimer = 0;
+    this.broadcast(this.roundMessage());
+  }
+
   roundMessage() {
+    if (this.dinner) return { t: 'round', mode: 'dinner', d: this.dinner.snapshot() };
     return {
+      mode: 'market',
       t: 'round',
       items: this.items.map(({ id, name, color, x, y, z, takenBy }) => ({ id, name, color, x, y, z, takenBy })),
     };
@@ -133,6 +168,13 @@ export class Room {
 
   checkEnd() {
     if (this.phase !== 'playing') return;
+    if (this.dinner) {
+      if (this.dinner.over()) {
+        this.phase = 'ended';
+        this.broadcast({ t: 'end', result: 'dinner', ranking: this.dinner.ranking() });
+      }
+      return;
+    }
     const alive = [...this.players.values()].filter((p) => p.alive);
     const allTaken = this.items.every((it) => it.takenBy !== null);
     let result = null;
@@ -149,7 +191,8 @@ export class Room {
 
   tick() {
     if (this.phase === 'playing') {
-      this.updateMonster();
+      if (this.dinner) this.dinner.tick(DT);
+      else this.updateMonster();
       this.checkEnd();
     }
     const snap = {
@@ -161,6 +204,7 @@ export class Room {
         alive: p.alive, crouch: p.crouch, light: p.light, noise: p.noise,
       })),
     };
+    if (this.dinner) snap.d = this.dinner.snapshot();
     if (this.monster && this.phase !== 'lobby') {
       const m = this.monster;
       snap.m = { p: [round(m.x), round(m.z)], yaw: round(m.yaw), state: m.state, target: m.targetId, anger: round(this.anger()) };
@@ -243,7 +287,11 @@ export class Room {
         this.startScan();
         return;
       }
-      const sees = seen.find((s) => s.p.id === target.id);
+      // Mientras te persigue no te pierde si te tiene a la vista y te oye (tus pasos en
+      // línea recta por el pasillo); para despistarlo hay que doblar una esquina
+      const dist = Math.hypot(target.x - m.x, target.z - m.z);
+      const sees = seen.find((s) => s.p.id === target.id) ||
+        (dist < this.noiseOf(target) && lineOfSight(m.x, m.z, target.x, target.z));
       if (sees) {
         m.lastKnown = { x: target.x, z: target.z };
         m.lastSeen = 0;
@@ -272,13 +320,15 @@ export class Room {
       return;
     }
     const heard = this.loudestHeard(alive);
-    if (heard) {
-      m.lastKnown = { x: heard.x, z: heard.z };
-      if (m.state !== 'investigate' || m.repath <= 0) {
-        this.setState('investigate');
-        m.path = findPath(m.x, m.z, heard.x, heard.z);
-        m.repath = 1;
-      }
+    if (heard && (m.state !== 'investigate' || m.repath <= 0)) {
+      // Oír no es ver: va hacia donde cree que sonó, con más error cuanto más lejos
+      const err = Math.hypot(heard.x - m.x, heard.z - m.z) * MONSTER.hearingError;
+      const a = Math.random() * Math.PI * 2;
+      const guess = resolveCircle(heard.x + Math.cos(a) * err, heard.z + Math.sin(a) * err, MONSTER.radius);
+      m.lastKnown = guess;
+      this.setState('investigate');
+      m.path = findPath(m.x, m.z, guess.x, guess.z);
+      m.repath = 2;
     }
     m.repath -= DT;
 
@@ -311,7 +361,10 @@ export class Room {
         continue;
       }
       if (!p.light) continue;
-      let range = MONSTER.sightRangeFlashlight;
+      // Si le apuntas con la linterna te ve de lejos; si el haz va hacia otro lado
+      // (por ejemplo, huyendo) solo distingue el resplandor de cerca
+      const toMonster = Math.abs(wrapAngle(Math.atan2(-dx, -dz) - p.yaw));
+      let range = toMonster < MONSTER.beamAngle ? MONSTER.sightRangeFlashlight : MONSTER.sightRangeGlow;
       if (p.crouch) range *= 0.6;
       if (dist > range) continue;
       const ang = Math.abs(wrapAngle(Math.atan2(dx, dz) - m.yaw));
@@ -425,6 +478,7 @@ export class Room {
       t: 'lobby',
       host: this.hostId,
       phase: this.phase,
+      mode: this.mode,
       players: [...this.players.values()].map((p) => ({ id: p.id, name: p.name, color: p.color })),
     });
   }

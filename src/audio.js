@@ -71,6 +71,86 @@ export class Audio {
     }
   }
 
+  // ---- La Cena ----
+
+  // Ruido de periódico: ráfagas cortas de ruido agudo (más fuertes al bajarlo).
+  paper(volume = 0.3) {
+    if (!this.ready) return;
+    const ctx = this.ctx, t0 = ctx.currentTime;
+    const n = 3 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < n; i++) {
+      const t = t0 + i * (0.05 + Math.random() * 0.08);
+      const src = ctx.createBufferSource();
+      src.buffer = this.noise;
+      const f = ctx.createBiquadFilter();
+      f.type = 'highpass';
+      f.frequency.value = 1800 + Math.random() * 2500;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(volume * (0.5 + Math.random() * 0.5), t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06 + Math.random() * 0.08);
+      src.connect(f).connect(g).connect(this.master);
+      src.start(t, Math.random() * 1.5, 0.2);
+    }
+  }
+
+  // Disparo: golpe seco muy fuerte con cola grave.
+  gunshot(volume = 1) {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(1.6 * volume, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    const shaper = ctx.createWaveShaper();
+    shaper.curve = distortionCurve(120);
+    src.connect(shaper).connect(g).connect(this.master);
+    src.start(t, 0, 0.6);
+    const o = ctx.createOscillator();
+    o.frequency.setValueAtTime(120, t);
+    o.frequency.exponentialRampToValueAtTime(30, t + 0.4);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(1.4 * volume, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    o.connect(og).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.55);
+  }
+
+  // Masticar: unos golpecitos sordos.
+  chew() {
+    if (!this.ready) return;
+    const t0 = this.ctx.currentTime;
+    for (let i = 0; i < 3; i++) {
+      const t = t0 + 0.12 + i * 0.16;
+      const o = this.ctx.createOscillator();
+      o.frequency.setValueAtTime(180, t);
+      o.frequency.exponentialRampToValueAtTime(70, t + 0.06);
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.12, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+      o.connect(g).connect(this.master);
+      o.start(t);
+      o.stop(t + 0.1);
+    }
+  }
+
+  // Tic-tac del reloj del comedor.
+  tick(high) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    o.type = 'square';
+    o.frequency.value = high ? 2600 : 2100;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.025, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+    o.connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.04);
+  }
+
   // Tos: dos o tres golpes de ruido filtrado con una vocal grave. `pos` null = la tuya.
   cough(pos) {
     if (!this.ready) return;

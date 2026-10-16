@@ -92,9 +92,9 @@ test('el monstruo se para a mirar 360 tras 5 s de persecución', () => {
   const m = room.monster;
   Object.assign(m, { x: 5, z: 18.5, yaw: Math.PI / 2, state: 'patrol', path: [] });
   const states = [];
-  // El jugador huye por el pasillo central, siempre 7 m por delante
+  // El jugador huye por el pasillo central, siempre 7 m por delante, alumbrando hacia el monstruo
   for (let i = 0; i < 8 * TICK_RATE; i++) {
-    room.handle('1', { t: 'state', p: [Math.min(56, m.x + 7), 0, 18.5], yaw: 0, noise: 14, crouch: false, light: true });
+    room.handle('1', { t: 'state', p: [Math.min(56, m.x + 7), 0, 18.5], yaw: -Math.PI / 2, noise: 14, crouch: false, light: true });
     room.tick();
     states.push(m.state);
   }
@@ -129,4 +129,82 @@ test('quieto no te ataca, pero una tos te delata', () => {
   p.coughIn = 0;
   for (let i = 0; i < TICK_RATE && p.alive; i++) room.tick();
   assert.equal(p.alive, false);
+});
+
+test('se le puede despistar doblando una esquina', () => {
+  let escapes = 0;
+  for (let trial = 0; trial < 5; trial++) {
+    const room = new Room('TEST', () => {});
+    clearInterval(room.interval);
+    room.addPlayer('1', 'Ana', () => {});
+    room.startRound();
+    const p = room.players.get('1');
+    p.coughIn = 999;
+    const m = room.monster;
+    Object.assign(m, { x: 43, z: 18.5, yaw: -Math.PI / 2, state: 'patrol', path: [] });
+    room.startChase(p);
+    // Ana huye corriendo 11 m por delante, gira por un pasillo y luego por otro
+    const route = [[24, 18.5], [24, 8.2], [4, 8.2], [4, 3]];
+    let pos = [32, 18.5], wi = 0;
+    for (let i = 0; i < 30 * TICK_RATE && p.alive; i++) {
+      const tgt = route[wi];
+      if (tgt) {
+        const dx = tgt[0] - pos[0], dz = tgt[1] - pos[1], d = Math.hypot(dx, dz);
+        const step = (i < 6 * TICK_RATE ? 6.5 : 3.5) / TICK_RATE;
+        if (d <= step) { pos = [...tgt]; wi++; } else pos = [pos[0] + (dx / d) * step, pos[1] + (dz / d) * step];
+      }
+      room.handle('1', {
+        t: 'state', p: [pos[0], 0, pos[1]], yaw: tgt ? Math.atan2(tgt[0] - pos[0], tgt[1] - pos[1]) : 0,
+        noise: tgt ? (i < 6 * TICK_RATE ? 16 : 7) : 0, crouch: false, light: true,
+      });
+      room.tick();
+    }
+    if (p.alive) escapes++;
+  }
+  assert.ok(escapes >= 3, `solo escapó ${escapes} de 5`);
+});
+
+test('siempre hay productos para toda la lista', () => {
+  for (let i = 0; i < 200; i++) {
+    const room = new Room('TEST', () => {});
+    clearInterval(room.interval);
+    room.addPlayer('1', 'Ana', () => {});
+    room.startRound();
+    assert.equal(room.items.length, 8);
+    assert.ok(room.items.every((it) => Number.isFinite(it.x)));
+  }
+});
+
+test('la cena: comer leyendo, disparo si mira y ranking', () => {
+  const room = new Room('TEST', () => {});
+  clearInterval(room.interval);
+  const inbox = [];
+  room.addPlayer('1', 'Ana', (m) => inbox.push(m));
+  room.addPlayer('2', 'Beto', () => {});
+  room.handle('1', { t: 'mode', mode: 'dinner' });
+  room.handle('1', { t: 'start' });
+  const d = room.dinner;
+  assert.ok(d);
+  const ana = d.players.get('1'), beto = d.players.get('2');
+  const tick = (s) => { for (let i = 0; i < s * TICK_RATE; i++) room.tick(); };
+
+  // Mientras lee, Ana se come todo el plato a tandas
+  d.sentinel.timer = 999;
+  while (ana.peas > 0) {
+    for (let i = 0; i < 10; i++) { room.handle('1', { t: 'load' }); tick(0.15); }
+    room.handle('1', { t: 'eat' });
+    tick(2);
+  }
+  assert.equal(ana.place, 1);
+
+  // Beto carga el tenedor y el centinela baja el periódico: disparo
+  room.handle('2', { t: 'load' });
+  d.setSentinel('watching', 2);
+  d.sentinel.duration = 2;
+  tick(1);
+  assert.equal(beto.alive, false);
+  assert.ok(inbox.some((m) => m.t === 'shot' && m.id === '2'));
+  const end = inbox.find((m) => m.t === 'end');
+  assert.equal(end.result, 'dinner');
+  assert.deepEqual(end.ranking.map((r) => r.name), ['Ana', 'Beto']);
 });
