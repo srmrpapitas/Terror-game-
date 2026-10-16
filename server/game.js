@@ -221,7 +221,8 @@ export class Room {
 
   // Ruido que hace ahora un jugador: al moverse, o al toser sin querer.
   noiseOf(p) {
-    const n = Math.max(p.noise, p.coughing > 0 ? PLAYER.coughNoise : 0);
+    const cough = p.coughing > 0 ? PLAYER.coughNoise * (p.crouch ? MONSTER.crouchCough : 1) : 0;
+    const n = Math.max(p.noise, cough);
     return n * (1 + MONSTER.anger.hearing * this.anger());
   }
 
@@ -251,9 +252,10 @@ export class Room {
       return;
     }
 
-    // ¿Atrapa a alguien? Si te quedas totalmente quieto no te ataca
+    // ¿Atrapa a alguien? Si te quedas totalmente quieto no te ataca, y agachado sin
+    // moverte tampoco (aunque tosas)
     for (const p of alive) {
-      if (this.noiseOf(p) > 0 && Math.hypot(p.x - m.x, p.z - m.z) < MONSTER.catchRange) {
+      if (this.noiseOf(p) > 0 && !hidden(p) && Math.hypot(p.x - m.x, p.z - m.z) < MONSTER.catchRange) {
         this.catchPlayer(p);
         return;
       }
@@ -291,7 +293,7 @@ export class Room {
       // línea recta por el pasillo); para despistarlo hay que doblar una esquina
       const dist = Math.hypot(target.x - m.x, target.z - m.z);
       const sees = seen.find((s) => s.p.id === target.id) ||
-        (dist < this.noiseOf(target) && lineOfSight(m.x, m.z, target.x, target.z));
+        (!hidden(target) && dist < this.noiseOf(target) && lineOfSight(m.x, m.z, target.x, target.z));
       if (sees) {
         m.lastKnown = { x: target.x, z: target.z };
         m.lastSeen = 0;
@@ -306,6 +308,14 @@ export class Room {
       m.chaseTime += DT;
       if (m.chaseTime >= MONSTER.chaseBeforeScan + MONSTER.anger.chaseLonger * this.anger()) {
         this.startScan();
+        return;
+      }
+      // Al verte primero ruge y se gira; no arranca hasta pasado un momento
+      if (m.windup > 0) {
+        m.windup -= DT;
+        m.chaseTime -= DT;
+        const diff = wrapAngle(Math.atan2(target.x - m.x, target.z - m.z) - m.yaw);
+        m.yaw += Math.sign(diff) * Math.min(Math.abs(diff), MONSTER.turnSpeed * DT);
         return;
       }
       const goal = sees ? target : m.lastKnown;
@@ -353,10 +363,12 @@ export class Room {
     const m = this.monster;
     const out = [];
     for (const p of alive) {
-      if (!this.noiseOf(p)) continue;
+      if (!this.noiseOf(p) || hidden(p)) continue;
       const dx = p.x - m.x, dz = p.z - m.z;
       const dist = Math.hypot(dx, dz);
-      if (dist < MONSTER.closeSense) {
+      // De cerca te nota aunque no lleves linterna, pero de espaldas casi hay que tocarlo
+      const inFront = Math.abs(wrapAngle(Math.atan2(dx, dz) - m.yaw)) < MONSTER.fov / 2;
+      if (dist < (inFront ? MONSTER.closeSense : MONSTER.closeSenseBehind)) {
         out.push({ p, dist });
         continue;
       }
@@ -401,7 +413,10 @@ export class Room {
     m.lastSeen = 0;
     m.chaseTime = 0;
     m.path = [];
-    if (!wasChasing) this.broadcast({ t: 'roar', target: p.id });
+    if (!wasChasing) {
+      m.windup = MONSTER.windup;
+      this.broadcast({ t: 'roar', target: p.id });
+    }
   }
 
   startScan() {
@@ -496,4 +511,9 @@ function wrapAngle(a) {
 
 function round(v) {
   return Math.round(v * 100) / 100;
+}
+
+// Agachado y sin moverte te confundes con las estanterías
+function hidden(p) {
+  return p.crouch && p.noise === 0;
 }

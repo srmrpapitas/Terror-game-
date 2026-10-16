@@ -93,7 +93,7 @@ test('el monstruo se para a mirar 360 tras 5 s de persecución', () => {
   Object.assign(m, { x: 5, z: 18.5, yaw: Math.PI / 2, state: 'patrol', path: [] });
   const states = [];
   // El jugador huye por el pasillo central, siempre 7 m por delante, alumbrando hacia el monstruo
-  for (let i = 0; i < 8 * TICK_RATE; i++) {
+  for (let i = 0; i < 10 * TICK_RATE; i++) {
     room.handle('1', { t: 'state', p: [Math.min(56, m.x + 7), 0, 18.5], yaw: -Math.PI / 2, noise: 14, crouch: false, light: true });
     room.tick();
     states.push(m.state);
@@ -103,7 +103,8 @@ test('el monstruo se para a mirar 360 tras 5 s de persecución', () => {
   assert.ok(chaseStart >= 0, 'nunca persiguió');
   assert.ok(scanStart > chaseStart, 'nunca se paró a mirar');
   const chaseSeconds = (scanStart - chaseStart) / TICK_RATE;
-  assert.ok(Math.abs(chaseSeconds - MONSTER.chaseBeforeScan) < 0.2, `persiguió ${chaseSeconds} s`);
+  // Primero ruge y se gira (windup) y luego persigue chaseBeforeScan segundos
+  assert.ok(Math.abs(chaseSeconds - MONSTER.chaseBeforeScan - MONSTER.windup) < 0.2, `persiguió ${chaseSeconds} s`);
   // Tras el giro vuelve a perseguir al jugador que sigue viendo
   assert.equal(states[scanStart + MONSTER.scanDuration * TICK_RATE + 1], 'chase');
 });
@@ -240,4 +241,40 @@ test('la cena: comer con el periódico bajado mata al instante', () => {
   room.handle('2', { t: 'load' });
   assert.equal(d.players.get('2').alive, false);
   assert.equal(d.players.get('1').alive, true);
+});
+
+test('agachado y quieto no te ve ni te pilla, aunque tosas', () => {
+  const room = new Room('TEST', () => {});
+  clearInterval(room.interval);
+  room.addPlayer('1', 'Ana', () => {});
+  room.startRound();
+  const p = room.players.get('1');
+  const m = room.monster;
+  Object.assign(m, { x: 5, z: 18.5, yaw: Math.PI / 2, state: 'patrol', path: [], wait: 0 });
+  room.handle('1', { t: 'state', p: [6, 0, 18.5], yaw: -Math.PI / 2, noise: 0, crouch: true, light: true });
+  p.coughIn = 0; // tose justo ahora, delante de él
+  for (let i = 0; i < 2 * TICK_RATE; i++) room.tick();
+  assert.equal(p.alive, true);
+  assert.notEqual(m.state, 'chase');
+});
+
+test('de espaldas no te nota de cerca y tarda en lanzarse', () => {
+  const room = new Room('TEST', () => {});
+  clearInterval(room.interval);
+  room.addPlayer('1', 'Ana', () => {});
+  room.startRound();
+  const p = room.players.get('1');
+  p.coughIn = 999;
+  const m = room.monster;
+  // Mira hacia +x y tú estás 2 m detrás, andando sin linterna
+  Object.assign(m, { x: 10, z: 18.5, yaw: Math.PI / 2, state: 'patrol', path: [], wait: 0 });
+  room.handle('1', { t: 'state', p: [8, 0, 18.5], yaw: 0, noise: 7, crouch: false, light: false });
+  assert.equal(room.visiblePlayers([p]).length, 0);
+  // Delante sí te ve, pero primero se queda rugiendo
+  room.handle('1', { t: 'state', p: [12, 0, 18.5], yaw: 0, noise: 7, crouch: false, light: false });
+  room.tick();
+  assert.equal(m.state, 'chase');
+  const x0 = m.x;
+  for (let i = 0; i < 0.5 * TICK_RATE; i++) room.tick();
+  assert.equal(m.x, x0);
 });
