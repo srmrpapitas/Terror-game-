@@ -30,7 +30,7 @@ export class MonsterView {
       eye.position.set(x, 0, 0);
       this.eyes.add(eye);
     }
-    this.faceLight = new THREE.PointLight(0xff2020, 0, 12, 1.2);
+    this.faceLight = new THREE.PointLight(0xff2020, 0, 0.7, 2);
     this.eyes.add(this.faceLight);
 
     this.placeholder = buildPlaceholder();
@@ -55,8 +55,8 @@ export class MonsterView {
             for (const m of mats) {
               m.fog = true;
               if (m.shininess !== undefined) m.shininess = 8;
-              // Un brillo rojizo muy tenue para que su silueta se intuya en la oscuridad
-              if (m.emissive) m.emissive.setHex(0x4a100a);
+              // Un brillo neutro muy tenue para que su silueta se intuya en la oscuridad, sin teñirlo
+              if (m.emissive) m.emissive.setHex(0x0c0c0c);
             }
           }
           if (o.isBone && /head$/i.test(o.name) && !this.head) this.head = o;
