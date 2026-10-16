@@ -218,7 +218,13 @@ function startRound(msg) {
   toast('Coged todo lo de la lista y salid por las cajas. No hagáis ruido.', 4000);
 }
 
+let pendingEnd = null;
 function endRound(result) {
+  // Si te acaban de atrapar, primero termina el susto
+  if (scare) {
+    pendingEnd = result;
+    return;
+  }
   phase = 'ended';
   player.frozen = true;
   document.exitPointerLock?.();
@@ -401,6 +407,11 @@ function updateScare(dt) {
     camera.updateProjectionMatrix();
     scare = null;
     player.frozen = phase !== 'playing';
+    if (pendingEnd) {
+      endRound(pendingEnd);
+      pendingEnd = null;
+      return;
+    }
     updateClickToPlay();
     toast('Te ha atrapado. Ahora eres un fantasma.', 3500);
   }
