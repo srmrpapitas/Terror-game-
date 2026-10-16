@@ -1,0 +1,4 @@
+node_modules/
+dist/
+# Modelos de Mixamo: no se suben al repo público (ver README)
+public/models/*.fbx

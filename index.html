@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Última Compra</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- Menú principal y sala de espera -->
+  <div id="menu" class="screen">
+    <h1>ÚLTIMA COMPRA</h1>
+    <p class="tagline">Llena la cesta. No hagas ruido. No mires atrás.</p>
+    <div id="menu-main" class="panel">
+      <input id="name" maxlength="16" placeholder="Tu nombre" autocomplete="off" />
+      <button id="btn-create">Crear partida</button>
+      <div class="row">
+        <input id="code" maxlength="4" placeholder="CÓDIGO" autocomplete="off" />
+        <button id="btn-join">Unirse</button>
+      </div>
+      <p id="menu-error" class="error"></p>
+    </div>
+    <div id="menu-lobby" class="panel hidden">
+      <p>Sala <strong id="lobby-code"></strong></p>
+      <button id="btn-share" class="secondary">Copiar enlace de invitación</button>
+      <ul id="lobby-players"></ul>
+      <button id="btn-start" class="hidden">Empezar</button>
+      <p id="lobby-wait" class="hint">Esperando a que el anfitrión empiece...</p>
+    </div>
+    <div class="help">
+      <p class="desktop-only">WASD moverse · Ratón mirar · Shift correr · C agacharse · F linterna · E coger</p>
+      <p class="touch-only">Joystick izquierdo para moverte · Desliza a la derecha para mirar</p>
+      <p>Corre y te oirá. Te ve si estás delante de él. Cada 5 s de persecución se para y mira a su alrededor: aprovecha para esconderte.</p>
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="list"><h2>Lista de la compra</h2><ul id="list-items"></ul></div>
+    <div id="room-tag"></div>
+    <div id="stamina"><div id="stamina-fill"></div></div>
+    <div id="prompt"></div>
+    <div id="toast"></div>
+    <div id="crosshair"></div>
+    <div id="vignette"></div>
+    <div id="click-to-play" class="hidden">Haz clic para jugar</div>
+  </div>
+
+  <!-- Controles táctiles -->
+  <div id="touch" class="hidden">
+    <div id="stick"><div id="stick-knob"></div></div>
+    <div id="look-zone"></div>
+    <div id="touch-buttons">
+      <button id="t-run">Correr</button>
+      <button id="t-crouch">Agachar</button>
+      <button id="t-light">Linterna</button>
+      <button id="t-use" class="hidden">Coger</button>
+    </div>
+  </div>
+
+  <!-- Susto y fin de ronda -->
+  <div id="scare" class="hidden"></div>
+  <div id="end" class="screen hidden">
+    <h1 id="end-title"></h1>
+    <p id="end-text"></p>
+    <button id="btn-again" class="hidden">Jugar otra vez</button>
+    <p id="end-wait" class="hint">Esperando al anfitrión...</p>
+  </div>
+  <div id="loading" class="hidden">Cargando al monstruo...</div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
