@@ -44,7 +44,7 @@ export const JUMPSCARE_MS = 2600;
 
 // Modo "La Cena": comer guisantes sin que te vea el centinela del periódico.
 export const DINNER = {
-  peas: 30, // guisantes en cada plato
+  peas: 80, // guisantes en cada plato
   loadInterval: 0.12, // s mínimos entre guisante y guisante
   eatBase: 0.45, // s que tardas en llevarte el tenedor a la boca...
   eatPerPea: 0.06, // ...más esto por cada guisante
@@ -56,4 +56,9 @@ export const DINNER = {
   fakeChance: 0.3, // veces que solo pasa la página y vuelve a leer
   grace: 0.3, // s de margen al bajar el periódico (por el retraso de la red)
   shotMs: 2400, // duración de la cinemática del disparo
+  // El ruido acorta el tiempo que sigue leyendo (s por cada acción)
+  noiseLoad: 0.15, // pinchar un guisante (el tenedor choca con el plato)
+  noiseEat: 0.4, // masticar...
+  noiseEatPerPea: 0.05, // ...más ruido cuantos más guisantes a la vez
+  noiseUnfake: 0.35, // probabilidad de que un ruido convierta un amago en bajada de verdad
 };

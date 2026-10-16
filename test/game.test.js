@@ -5,7 +5,7 @@ import WebSocket from 'ws';
 import { createServer } from '../server/index.js';
 import { findPath } from '../server/nav.js';
 import { SPAWN, MONSTER_SPAWN, PATROL_POINTS, ITEM_SPOTS, collides } from '../shared/map.js';
-import { MONSTER, TICK_RATE } from '../shared/constants.js';
+import { MONSTER, TICK_RATE, DINNER } from '../shared/constants.js';
 import { Room } from '../server/game.js';
 
 function client(port) {
@@ -207,4 +207,37 @@ test('la cena: comer leyendo, disparo si mira y ranking', () => {
   const end = inbox.find((m) => m.t === 'end');
   assert.equal(end.result, 'dinner');
   assert.deepEqual(end.ranking.map((r) => r.name), ['Ana', 'Beto']);
+});
+
+test('la cena: pinchar y masticar hacen que baje antes el periódico', () => {
+  const room = new Room('TEST', () => {});
+  clearInterval(room.interval);
+  room.addPlayer('1', 'Ana', () => {});
+  room.handle('1', { t: 'mode', mode: 'dinner' });
+  room.handle('1', { t: 'start' });
+  const d = room.dinner;
+  d.setSentinel('reading', 5);
+  for (let i = 0; i < 5; i++) {
+    room.handle('1', { t: 'load' });
+    for (let k = 0; k < 3; k++) room.tick();
+  }
+  room.handle('1', { t: 'eat' });
+  // 15 ticks (0,75 s) + 5 pinchazos y un bocado de ruido
+  const expected = 5 - 0.75 - 5 * DINNER.noiseLoad - (DINNER.noiseEat + 5 * DINNER.noiseEatPerPea);
+  assert.ok(Math.abs(d.sentinel.timer - expected) < 0.06, `timer ${d.sentinel.timer} vs ${expected}`);
+});
+
+test('la cena: comer con el periódico bajado mata al instante', () => {
+  const room = new Room('TEST', () => {});
+  clearInterval(room.interval);
+  room.addPlayer('1', 'Ana', () => {});
+  room.addPlayer('2', 'Beto', () => {});
+  room.handle('1', { t: 'mode', mode: 'dinner' });
+  room.handle('1', { t: 'start' });
+  const d = room.dinner;
+  d.setSentinel('watching', 3);
+  d.sentinel.duration = 3;
+  room.handle('2', { t: 'load' });
+  assert.equal(d.players.get('2').alive, false);
+  assert.equal(d.players.get('1').alive, true);
 });

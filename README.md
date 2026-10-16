@@ -21,7 +21,7 @@ Un juego de terror cooperativo para 1 a 4 amigos: entráis de noche en un superm
 
 ## La Cena (segundo juego)
 
-En la sala, el anfitrión elige **Supermercado** o **La Cena**. En La Cena estáis sentados a la mesa, unos enfrente de otros, con un plato de guisantes cada uno. En la cabecera, el monstruo lee el periódico. Mientras lee, carga guisantes en el tenedor (**Cargar**, o mantenerlo pulsado) y cómetelos (**Comer**). Cuando hace ruido con el periódico es que lo va a bajar: si al bajarlo te ve comiendo o con el tenedor cargado, te dispara (**Soltar** devuelve los guisantes al plato). A veces solo pasa la página. Los demás siguen hasta limpiar el plato, y al final hay clasificación: primero quien termina antes, y después los eliminados según cuánto aguantaron.
+En la sala, el anfitrión elige **Supermercado** o **La Cena**. En La Cena estáis sentados a la mesa, unos enfrente de otros, con un plato de guisantes cada uno. En la cabecera, el monstruo lee el periódico. Mientras lee, carga guisantes en el tenedor (**Cargar**, o mantenerlo pulsado) y cómetelos (**Comer**). Cuando hace ruido con el periódico es que lo va a bajar: si al bajarlo te ve comiendo o con el tenedor cargado, te dispara (**Soltar** devuelve los guisantes al plato). A veces solo pasa la página. Ojo: cada pinchazo en el plato y cada bocado hacen ruido, y el ruido le hace bajar antes el periódico (y que un amago acabe en bajada de verdad). Los demás siguen hasta limpiar el plato, y al final hay clasificación: primero quien termina antes, y después los eliminados según cuánto aguantaron.
 
 | Acción | PC | Móvil |
 | --- | --- | --- |

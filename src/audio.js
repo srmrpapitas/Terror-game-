@@ -118,19 +118,48 @@ export class Audio {
     o.stop(t + 0.55);
   }
 
-  // Masticar: unos golpecitos sordos.
-  chew() {
+  // Tenedor contra el plato: un tintineo metálico corto.
+  clink(volume = 0.5) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    for (const [f, d] of [[2900 + Math.random() * 300, 0.18], [4300 + Math.random() * 400, 0.1], [6100, 0.06]]) {
+      const o = this.ctx.createOscillator();
+      o.frequency.value = f;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(volume * 0.25, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(g).connect(this.master);
+      o.start(t);
+      o.stop(t + d + 0.02);
+    }
+  }
+
+  // Masticar: mordiscos crujientes; más largo cuantos más guisantes.
+  chew(volume = 1, peas = 3) {
     if (!this.ready) return;
     const t0 = this.ctx.currentTime;
-    for (let i = 0; i < 3; i++) {
-      const t = t0 + 0.12 + i * 0.16;
-      const o = this.ctx.createOscillator();
-      o.frequency.setValueAtTime(180, t);
-      o.frequency.exponentialRampToValueAtTime(70, t + 0.06);
+    const bites = Math.min(8, 2 + Math.ceil(peas / 3));
+    for (let i = 0; i < bites; i++) {
+      const t = t0 + 0.15 + i * (0.17 + Math.random() * 0.05);
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.noise;
+      const f = this.ctx.createBiquadFilter();
+      f.type = 'bandpass';
+      f.frequency.value = 500 + Math.random() * 700;
+      f.Q.value = 1.5;
       const g = this.ctx.createGain();
-      g.gain.setValueAtTime(0.12, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
-      o.connect(g).connect(this.master);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.35 * volume, t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+      src.connect(f).connect(g).connect(this.master);
+      src.start(t, Math.random() * 1.5, 0.15);
+      const o = this.ctx.createOscillator();
+      o.frequency.setValueAtTime(150, t);
+      o.frequency.exponentialRampToValueAtTime(60, t + 0.07);
+      const og = this.ctx.createGain();
+      og.gain.setValueAtTime(0.18 * volume, t);
+      og.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+      o.connect(og).connect(this.master);
       o.start(t);
       o.stop(t + 0.1);
     }
