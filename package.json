@@ -1,0 +1,23 @@
+{
+  "name": "ultima-compra",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Juego de terror cooperativo en un supermercado (Three.js + WebSocket)",
+  "type": "module",
+  "scripts": {
+    "dev": "node server/index.js --dev",
+    "build": "vite build",
+    "start": "node server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "three": "0.170.0",
+    "ws": "8.18.0"
+  },
+  "devDependencies": {
+    "vite": "6.0.7"
+  }
+}
