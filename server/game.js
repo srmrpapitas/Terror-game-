@@ -207,7 +207,7 @@ export class Room {
     if (this.dinner) snap.d = this.dinner.snapshot();
     if (this.monster && this.phase !== 'lobby') {
       const m = this.monster;
-      snap.m = { p: [round(m.x), round(m.z)], yaw: round(m.yaw), state: m.state, target: m.targetId, anger: round(this.anger()) };
+      snap.m = { p: [round(m.x), round(m.z)], yaw: round(m.yaw), state: m.state === 'chase' && m.windup > 0 ? 'notice' : m.state, target: m.targetId, anger: round(this.anger()) };
     }
     this.broadcast(snap);
   }
