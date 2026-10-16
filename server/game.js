@@ -33,6 +33,7 @@ export class Room {
       id, name, send, color,
       x: SPAWN.x + (Math.random() - 0.5) * 3, y: 0, z: SPAWN.z, yaw: Math.PI,
       noise: 0, crouch: false, light: true,
+      coughIn: nextCough(), coughing: 0,
       // Quien entra a mitad de ronda espera como fantasma
       alive: this.phase !== 'playing',
     };
@@ -105,6 +106,8 @@ export class Room {
     let i = 0;
     for (const p of this.players.values()) {
       p.alive = true;
+      p.coughIn = nextCough();
+      p.coughing = 0;
       p.x = SPAWN.x - 2 + (i++) * 1.3;
       p.z = SPAWN.z;
     }
@@ -165,7 +168,27 @@ export class Room {
     this.broadcast(snap);
   }
 
+  // Ruido que hace ahora un jugador: al moverse, o al toser sin querer.
+  noiseOf(p) {
+    return Math.max(p.noise, p.coughing > 0 ? PLAYER.coughNoise : 0);
+  }
+
+  // Cada cierto tiempo cada jugador tose aunque esté quieto.
+  updateCoughs() {
+    for (const p of this.players.values()) {
+      if (!p.alive) continue;
+      p.coughing -= DT;
+      p.coughIn -= DT;
+      if (p.coughIn <= 0) {
+        p.coughIn = nextCough();
+        p.coughing = 1;
+        this.broadcast({ t: 'cough', id: p.id, p: [round(p.x), round(p.z)] });
+      }
+    }
+  }
+
   updateMonster() {
+    this.updateCoughs();
     const m = this.monster;
     m.stateTime += DT;
     const alive = [...this.players.values()].filter((p) => p.alive);
@@ -176,9 +199,9 @@ export class Room {
       return;
     }
 
-    // ¿Atrapa a alguien?
+    // ¿Atrapa a alguien? Si te quedas totalmente quieto no te ataca
     for (const p of alive) {
-      if (Math.hypot(p.x - m.x, p.z - m.z) < MONSTER.catchRange) {
+      if (this.noiseOf(p) > 0 && Math.hypot(p.x - m.x, p.z - m.z) < MONSTER.catchRange) {
         this.catchPlayer(p);
         return;
       }
@@ -266,18 +289,21 @@ export class Room {
     this.followPath(speed);
   }
 
+  // El monstruo no ve en la oscuridad: solo distingue la luz de las linternas, y a
+  // quien está completamente quieto lo ignora aunque lo tenga delante.
   visiblePlayers(alive) {
     const m = this.monster;
     const out = [];
     for (const p of alive) {
+      if (!this.noiseOf(p)) continue;
       const dx = p.x - m.x, dz = p.z - m.z;
       const dist = Math.hypot(dx, dz);
       if (dist < MONSTER.closeSense) {
         out.push({ p, dist });
         continue;
       }
-      // Agachado eres más difícil de ver; con la linterna, más fácil
-      let range = p.light ? MONSTER.sightRangeFlashlight : MONSTER.sightRange;
+      if (!p.light) continue;
+      let range = MONSTER.sightRangeFlashlight;
       if (p.crouch) range *= 0.6;
       if (dist > range) continue;
       const ang = Math.abs(wrapAngle(Math.atan2(dx, dz) - m.yaw));
@@ -292,10 +318,11 @@ export class Room {
     const m = this.monster;
     let best = null, bestScore = 0;
     for (const p of alive) {
-      if (!p.noise) continue;
+      const noise = this.noiseOf(p);
+      if (!noise) continue;
       const dist = Math.hypot(p.x - m.x, p.z - m.z);
       // A través de estanterías se oye peor
-      const radius = lineOfSight(m.x, m.z, p.x, p.z) ? p.noise : p.noise * 0.7;
+      const radius = lineOfSight(m.x, m.z, p.x, p.z) ? noise : noise * 0.7;
       if (dist < radius && radius - dist > bestScore) {
         bestScore = radius - dist;
         best = p;
@@ -393,6 +420,10 @@ export class Room {
       players: [...this.players.values()].map((p) => ({ id: p.id, name: p.name, color: p.color })),
     });
   }
+}
+
+function nextCough() {
+  return PLAYER.coughEvery * (0.75 + Math.random() * 0.5);
 }
 
 function wrapAngle(a) {

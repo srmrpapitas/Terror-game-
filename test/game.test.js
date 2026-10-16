@@ -107,3 +107,26 @@ test('el monstruo se para a mirar 360 tras 5 s de persecución', () => {
   // Tras el giro vuelve a perseguir al jugador que sigue viendo
   assert.equal(states[scanStart + MONSTER.scanDuration * TICK_RATE + 1], 'chase');
 });
+
+test('quieto no te ataca, pero una tos te delata', () => {
+  const room = new Room('TEST', () => {});
+  clearInterval(room.interval);
+  room.addPlayer('1', 'Ana', () => {});
+  room.startRound();
+  const p = room.players.get('1');
+  const m = room.monster;
+  // Quieto, con la linterna encendida y el monstruo pegado a ti
+  p.coughIn = 999;
+  Object.assign(m, { x: 5, z: 18.5, yaw: Math.PI / 2, state: 'patrol', path: [] });
+  for (let i = 0; i < 3 * TICK_RATE; i++) {
+    room.handle('1', { t: 'state', p: [6, 0, 18.5], yaw: 0, noise: 0, crouch: false, light: true });
+    m.x = 5; m.z = 18.5;
+    room.tick();
+    assert.notEqual(m.state, 'chase');
+  }
+  assert.equal(p.alive, true);
+  // Se le escapa una tos: ahora sí va a por él
+  p.coughIn = 0;
+  for (let i = 0; i < TICK_RATE && p.alive; i++) room.tick();
+  assert.equal(p.alive, false);
+});

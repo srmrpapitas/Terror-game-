@@ -65,26 +65,25 @@ function buildObstacles() {
 
 export const OBSTACLES = buildObstacles();
 
-// Huecos junto a las estanterías donde pueden aparecer productos de la lista.
+// Altura (m) de la cara superior de cada balda de las estanterías.
+export const SHELF_LEVELS = [0.12, 0.7, 1.28, 1.86, 2.44];
+
+// Sitios sobre las baldas donde pueden aparecer productos de la lista.
 function buildItemSpots() {
   const spots = [];
   for (const ob of OBSTACLES) {
-    if (ob.kind !== 'shelf' && ob.kind !== 'fridge') continue;
+    if (ob.kind !== 'shelf') continue;
     const alongZ = ob.d > ob.w;
     const len = alongZ ? ob.d : ob.w;
-    for (let t = 1.2; t < len - 1; t += 2.3) {
+    const depth = alongZ ? ob.w : ob.d;
+    for (let t = 1.0; t < len - 0.6; t += 1.9) {
       for (const side of [-1, 1]) {
-        let x, z;
-        if (alongZ) {
-          x = ob.x + side * (ob.w / 2 + 0.15);
-          z = ob.z - ob.d / 2 + t;
-        } else {
-          x = ob.x - ob.w / 2 + t;
-          z = ob.z + side * (ob.d / 2 + 0.15);
-        }
-        if (x < 0.5 || x > WIDTH - 0.5 || z < 0.5 || z > DEPTH - 0.5) continue;
-        if (collides(x, z, 0.1)) continue;
-        spots.push({ x, z, y: 0.6 + ((spots.length * 7) % 3) * 0.55 });
+        // En la mitad de la balda que da a cada pasillo
+        const off = side * depth * 0.28;
+        const x = alongZ ? ob.x + off : ob.x - ob.w / 2 + t;
+        const z = alongZ ? ob.z - ob.d / 2 + t : ob.z + off;
+        const level = SHELF_LEVELS[1 + (spots.length % 3)];
+        spots.push({ x, z, y: level + 0.17, side, alongZ });
       }
     }
   }
