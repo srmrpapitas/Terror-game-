@@ -1,0 +1,27 @@
+# Despliegue en Cloudflare Workers (ver README, sección "Publicar en Cloudflare").
+name = "ultima-compra"
+main = "worker/index.js"
+compatibility_date = "2025-09-01"
+
+[build]
+command = "npm run build"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/ws", "/models/*"]
+
+# Cada sala de juego es un Durable Object
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "GameRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GameRoom"]
+
+# El modelo del monstruo (no está en el repo) se sube a este bucket de R2
+[[r2_buckets]]
+binding = "MODELS"
+bucket_name = "ultima-compra-models"

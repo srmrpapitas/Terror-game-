@@ -90,7 +90,7 @@ export class MonsterView {
   // no existe se ignora y el monstruo usa la que tenga.
   loadAnimations() {
     const loader = new FBXLoader();
-    for (const name of ['walk', 'run', 'idle', 'scream']) {
+    for (const name of ['walk', 'run', 'idle', 'turn', 'scream']) {
       loader.load(`/models/warrok-${name}.fbx`, (anim) => {
         if (anim.animations.length) this.addClip(name, anim.animations[0]);
       }, undefined, () => {});
@@ -98,8 +98,16 @@ export class MonsterView {
   }
 
   addClip(name, clip) {
-    // Mixamo a veces exporta pistas de posición en la cadera que lo desplazan; se quitan
-    clip.tracks = clip.tracks.filter((t) => !/Hips\.position/.test(t.name));
+    // Las animaciones de Mixamo sin "In Place" desplazan la cadera: se deja solo el
+    // movimiento vertical para que el servidor sea quien mueve al monstruo
+    for (const t of clip.tracks) {
+      if (!/Hips\.position$/.test(t.name)) continue;
+      const v = t.values;
+      for (let i = 0; i < v.length; i += 3) {
+        v[i] = v[0];
+        v[i + 2] = v[2];
+      }
+    }
     this.clips[name] = this.mixer.clipAction(clip);
     this.playFor(this.state, true);
   }
@@ -107,7 +115,8 @@ export class MonsterView {
   // Elige la animación según lo que esté haciendo.
   playFor(state, force = false) {
     if (!this.mixer) return;
-    const want = { chase: 'run', patrol: 'walk', investigate: 'walk', scare: 'scream' }[state] || 'idle';
+    const want = { chase: 'run', patrol: 'walk', investigate: 'walk', scan: 'turn', scare: 'scream' }[state] || 'idle';
+    if (want === 'turn' && !this.clips.turn) return this.playFor('idle', force);
     const action = this.clips[want] || this.clips.walk || this.clips.base;
     if (!action || (action === this.action && !force)) return;
     action.reset().play();
