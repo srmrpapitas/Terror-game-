@@ -22,19 +22,22 @@ export const MONSTER = {
   height: 2.6,
   patrolSpeed: 2.5,
   investigateSpeed: 4,
-  chaseSpeed: 9,
+  chaseSpeed: 7.4, // algo más que tú corriendo (6,5): en recta te alcanza, en las esquinas lo puedes despistar
   chaseBeforeScan: 5, // s persiguiendo antes de pararse
   scanDuration: 2, // s girando 360°
   fov: (110 * Math.PI) / 180,
-  sightRangeFlashlight: 24, // solo ve la luz de las linternas
+  sightRangeFlashlight: 24, // solo ve la luz de las linternas: si le apuntas, de lejos
+  sightRangeGlow: 5, // si la linterna apunta a otro lado, solo el resplandor de cerca
+  beamAngle: (70 * Math.PI) / 180,
   closeSense: 2.5, // a esta distancia te detecta sin linterna, si te mueves
   catchRange: 1.3,
-  loseSightAfter: 3, // s sin verte antes de dejar de perseguir
+  loseSightAfter: 1.2, // s sin verte antes de dejar de perseguir (va a donde te vio por última vez)
+  hearingError: 0.3, // al oírte solo sabe tu posición aproximada (fracción de la distancia)
   startDelay: 10, // s quieto al empezar la ronda
   feedDuration: 4, // s quieto tras atrapar a alguien
   turnSpeed: 6, // rad/s
-  // Con toda la lista cogida: +30 % de velocidad, +50 % de oído y 2 s más persiguiendo
-  anger: { speed: 0.3, hearing: 0.5, chaseLonger: 2 },
+  // Con toda la lista cogida: +15 % de velocidad, +50 % de oído y 1 s más persiguiendo
+  anger: { speed: 0.15, hearing: 0.5, chaseLonger: 1 },
 };
 
 export const JUMPSCARE_MS = 2600;

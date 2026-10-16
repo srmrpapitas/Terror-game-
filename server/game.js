@@ -94,9 +94,12 @@ export class Room {
     const products = [...PRODUCTS].sort(() => Math.random() - 0.5).slice(0, ITEMS_PER_ROUND);
     // Productos separados entre sí para obligar a recorrer la tienda
     const chosen = [];
-    for (const s of spots) {
-      if (chosen.length === products.length) break;
-      if (chosen.every((c) => Math.hypot(c.x - s.x, c.z - s.z) > 9)) chosen.push(s);
+    // Si no caben todos tan separados, se va bajando la distancia mínima
+    for (const minDist of [9, 7, 5, 0]) {
+      for (const s of spots) {
+        if (chosen.length === products.length) break;
+        if (chosen.every((c) => c !== s && Math.hypot(c.x - s.x, c.z - s.z) > minDist)) chosen.push(s);
+      }
     }
     this.items = products.map((prod, i) => ({
       id: i, name: prod.name, color: prod.color,
@@ -243,7 +246,11 @@ export class Room {
         this.startScan();
         return;
       }
-      const sees = seen.find((s) => s.p.id === target.id);
+      // Mientras te persigue no te pierde si te tiene a la vista y te oye (tus pasos en
+      // línea recta por el pasillo); para despistarlo hay que doblar una esquina
+      const dist = Math.hypot(target.x - m.x, target.z - m.z);
+      const sees = seen.find((s) => s.p.id === target.id) ||
+        (dist < this.noiseOf(target) && lineOfSight(m.x, m.z, target.x, target.z));
       if (sees) {
         m.lastKnown = { x: target.x, z: target.z };
         m.lastSeen = 0;
@@ -272,13 +279,15 @@ export class Room {
       return;
     }
     const heard = this.loudestHeard(alive);
-    if (heard) {
-      m.lastKnown = { x: heard.x, z: heard.z };
-      if (m.state !== 'investigate' || m.repath <= 0) {
-        this.setState('investigate');
-        m.path = findPath(m.x, m.z, heard.x, heard.z);
-        m.repath = 1;
-      }
+    if (heard && (m.state !== 'investigate' || m.repath <= 0)) {
+      // Oír no es ver: va hacia donde cree que sonó, con más error cuanto más lejos
+      const err = Math.hypot(heard.x - m.x, heard.z - m.z) * MONSTER.hearingError;
+      const a = Math.random() * Math.PI * 2;
+      const guess = resolveCircle(heard.x + Math.cos(a) * err, heard.z + Math.sin(a) * err, MONSTER.radius);
+      m.lastKnown = guess;
+      this.setState('investigate');
+      m.path = findPath(m.x, m.z, guess.x, guess.z);
+      m.repath = 2;
     }
     m.repath -= DT;
 
@@ -311,7 +320,10 @@ export class Room {
         continue;
       }
       if (!p.light) continue;
-      let range = MONSTER.sightRangeFlashlight;
+      // Si le apuntas con la linterna te ve de lejos; si el haz va hacia otro lado
+      // (por ejemplo, huyendo) solo distingue el resplandor de cerca
+      const toMonster = Math.abs(wrapAngle(Math.atan2(-dx, -dz) - p.yaw));
+      let range = toMonster < MONSTER.beamAngle ? MONSTER.sightRangeFlashlight : MONSTER.sightRangeGlow;
       if (p.crouch) range *= 0.6;
       if (dist > range) continue;
       const ang = Math.abs(wrapAngle(Math.atan2(dx, dz) - m.yaw));
