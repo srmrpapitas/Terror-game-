@@ -31,16 +31,23 @@ export class Dinner {
   handle(id, msg) {
     const d = this.players.get(id);
     if (!d || !d.alive || d.place) return;
+    // Pinchar o comer con el periódico bajado: te ve y dispara al momento
+    if (this.sentinel.state === 'watching' && (msg.t === 'load' || (msg.t === 'eat' && d.fork > 0))) {
+      this.shoot(id);
+      return;
+    }
     switch (msg.t) {
       case 'load':
         // Un guisante cada vez, sin pasarse de los que quedan en el plato
         if (d.eating > 0 || d.cooldown > 0 || d.fork >= d.peas) return;
         d.fork++;
         d.cooldown = DINNER.loadInterval;
+        this.noise(DINNER.noiseLoad);
         break;
       case 'eat':
         if (d.eating > 0 || d.fork === 0) return;
         d.eating = DINNER.eatBase + DINNER.eatPerPea * d.fork;
+        this.noise(DINNER.noiseEat + DINNER.noiseEatPerPea * d.fork);
         break;
       case 'drop':
         // Devuelve los guisantes al plato (rápido, pero no instantáneo)
@@ -94,6 +101,14 @@ export class Dinner {
     } else {
       this.setSentinel('reading', rand(DINNER.read));
     }
+  }
+
+  // Pinchar y masticar hacen ruido: el centinela baja antes el periódico, y si ya
+  // estaba a punto de bajarlo, deja de ser una falsa alarma.
+  noise(seconds) {
+    const s = this.sentinel;
+    if (s.state === 'reading') s.timer = Math.max(0.05, s.timer - seconds);
+    else if (s.state === 'warning' && Math.random() < DINNER.noiseUnfake) s.fake = false;
   }
 
   setSentinel(state, timer) {

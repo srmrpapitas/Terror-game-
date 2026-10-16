@@ -39,7 +39,6 @@ export class DinnerView {
     this.buildRoom();
     this.buildPlates();
     this.buildPaper();
-    this.buildLocalFork();
   }
 
   // ---- Escenario ----
@@ -124,7 +123,7 @@ export class DinnerView {
       const m = new THREE.Matrix4();
       for (let i = 0; i < DINNER.peas; i++) {
         const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 0.08;
-        m.setPosition(Math.cos(a) * r, 0.034 + Math.random() * 0.012, Math.sin(a) * r);
+        m.setPosition(Math.cos(a) * r, 0.034 + Math.random() * (0.03 - r * 0.25), Math.sin(a) * r);
         peas.setMatrixAt(i, m);
       }
       g.add(peas);
@@ -155,14 +154,6 @@ export class DinnerView {
     this.gun.visible = false;
     this.gun.scale.setScalar(1.8);
     this.scene.add(this.gun);
-  }
-
-  buildLocalFork() {
-    this.fork = buildFork();
-    this.fork.scale.setScalar(1.4);
-    this.fork.position.set(0.12, -0.13, -0.3);
-    this.fork.rotation.set(0.35, 0.3, 0.1);
-    this.camera.add(this.fork);
   }
 
   // ---- Partida ----
@@ -210,17 +201,23 @@ export class DinnerView {
     if (prev && prev.s !== d.s) this.onSentinel(d.s);
     for (const p of d.players) {
       if (p.seat < 0) continue;
-      const plate = this.plates[p.seat];
-      plate.peas.count = Math.max(0, p.peas - p.fork);
-      if (p.id === this.me) continue;
+      const mine = p.id === this.me;
       let f = this.diners.get(p.id);
       if (!f) {
-        f = buildDiner(SEATS[p.seat], info.get(p.id));
+        f = buildDiner(SEATS[p.seat], info.get(p.id), mine);
         this.scene.add(f.group);
         this.diners.set(p.id, f);
       }
+      const before = prev?.players.find((q) => q.id === p.id);
+      // Pinchar: el tenedor se clava en el plato y suena. Comer: se oye masticar.
+      if (before && p.fork > before.fork) {
+        this.audio.clink(mine ? 0.5 : 0.3);
+        f.stab = 1;
+      }
+      if (before && p.eating && !before.eating) this.audio.chew(mine ? 1 : 0.6, p.fork || before.fork);
       f.data = p;
       setForkPeas(f.fork, p.fork);
+      this.plates[p.seat].peas.count = Math.max(0, p.peas - p.fork);
     }
     for (const [id, f] of this.diners) {
       if (!d.players.some((p) => p.id === id)) {
@@ -228,8 +225,6 @@ export class DinnerView {
         this.diners.delete(id);
       }
     }
-    const me = this.mine();
-    if (me) setForkPeas(this.fork, me.fork);
   }
 
   onSentinel(s) {
@@ -237,25 +232,14 @@ export class DinnerView {
     else if (s === 'reading') this.audio.paper(0.3);
   }
 
-  // Un jugador ha recibido el disparo.
+  // Disparo: todos ven la escena. Si caen varios a la vez, van todos en el mismo tiro.
   onShot(id) {
-    const f = this.diners.get(id);
-    if (id === this.me) {
-      this.shot = { t: 0, fired: false };
-      return;
-    }
-    // Disparo a otro: fogonazo en la cabecera y el jugador cae sobre la mesa
-    this.audio.gunshot(0.8);
-    this.aimGun(f ? f.head.getWorldPosition(new THREE.Vector3()) : this.camera.position);
-    this.gun.visible = true;
-    this.flash.visible = true;
-    setTimeout(() => { this.flash.visible = false; }, 90);
-    setTimeout(() => { if (!this.shot) this.gun.visible = false; }, 1200);
-    if (f) f.dead = true;
+    if (this.shot && !this.shot.fired) this.shot.victims.push(id);
+    else this.shot = { t: 0, fired: false, victims: [id] };
   }
 
   aimGun(target) {
-    const hand = new THREE.Vector3(SENTINEL.x + 0.45, 1.3, -0.25);
+    const hand = new THREE.Vector3(SENTINEL.x + 0.5, 1.45, 0);
     this.gun.position.copy(hand);
     this.gun.lookAt(target);
   }
@@ -274,104 +258,104 @@ export class DinnerView {
 
     // Periódico: tapándole la cara leyendo, temblando antes de bajar, abajo mirando.
     // Se coloca respecto a su cabeza, que se mueve con la animación.
-    const s = this.state?.s ?? 'reading';
+    const s = this.shot ? 'watching' : this.state?.s ?? 'reading';
     const head = this.monster.headWorldPosition(new THREE.Vector3());
     const want = s === 'watching' ? -0.85 : s === 'warning' ? -0.1 : 0;
     this.paperY += (want - this.paperY) * Math.min(1, dt * (s === 'watching' ? 9 : 5));
     const shake = s === 'warning' ? Math.sin(time * 40) * 0.015 : 0;
     this.paper.position.set(head.x + 0.32, head.y + this.paperY + shake, head.z);
     this.paper.rotation.set(s === 'watching' ? -1.1 : 0, Math.PI / 2, shake * 3);
-    // Mirando: gira la cabeza buscando a alguien
-    const yaw = Math.PI / 2 + (s === 'watching' ? Math.sin(time * 1.3) * 0.35 : 0);
+    // Mirando: gira la cabeza buscando a alguien (o hacia su víctima)
+    let yaw = Math.PI / 2 + (s === 'watching' ? Math.sin(time * 1.3) * 0.35 : 0);
+    const victim = this.shot && this.diners.get(this.shot.victims[0]);
+    if (victim) {
+      const v = victim.group.position;
+      yaw = Math.atan2(v.x - SENTINEL.x, v.z - SENTINEL.z);
+    }
     this.monster.targetYaw = yaw;
     this.monster.update(dt, time);
     // Sus ojos brillan, pero sin teñir de rojo todo el comedor
     this.monster.faceLight.intensity = s === 'watching' ? 1.5 : 0.4;
     if (s === 'reading' && Math.random() < dt * 0.25) this.audio.paper(0.12);
 
-    // Los demás: tenedor arriba si comen; caen sobre la mesa si les disparan
+    // Comensales: clavan el tenedor, se lo llevan a la boca y caen si les disparan
     for (const f of this.diners.values()) {
       const eating = f.data?.eating;
       f.forkT += ((eating ? 1 : 0) - f.forkT) * Math.min(1, dt * 8);
-      f.fork.position.set(0.18, 0.95 + f.forkT * 0.42, -0.18 - f.forkT * 0.08);
-      f.fork.rotation.x = -1.2 + f.forkT * 0.9;
+      f.stab = Math.max(0, (f.stab || 0) - dt * 5);
+      const jab = Math.sin(f.stab * Math.PI);
+      f.fork.position.set(0.16, 0.86 + f.forkT * 0.5 - jab * 0.12, -0.3 + f.forkT * 0.12 - jab * 0.12);
+      f.fork.rotation.x = -0.9 + f.forkT * 1.6 - jab * 0.5;
       const fall = f.dead ? 1 : 0;
-      f.body.rotation.x += (fall * -0.9 - f.body.rotation.x) * Math.min(1, dt * 6);
+      f.body.rotation.x += (fall * -1.0 - f.body.rotation.x) * Math.min(1, dt * 6);
+      if (f.dead) f.fork.visible = false;
       if (f.data?.place) f.mat.emissive?.setHex(0x113311);
     }
 
-    if (this.shot) return this.updateShot(dt);
-
-    // Tu cámara, sentado en tu sitio
-    const me = this.mine();
-    const seat = me && me.seat >= 0 ? SEATS[me.seat] : null;
-    if (seat) {
-      this.camera.position.set(seat.x, EYE_Y, seat.z);
-      // Mirando a la mesa, girado hacia la cabecera para tener al centinela a la vista
-      const baseYaw = (seat.face < 0 ? 0 : Math.PI) + seat.face * -0.75;
-      this.camera.rotation.set(-0.14 + this.look.pitch, baseYaw + this.look.yaw, 0, 'YXZ');
-      // Tenedor: sube a la boca al comer
-      const eatT = me.eating ? 1 : 0;
-      this.forkT = (this.forkT || 0) + (eatT - (this.forkT || 0)) * Math.min(1, dt * 9);
-      this.fork.position.set(0.12 - this.forkT * 0.11, -0.13 + this.forkT * 0.1, -0.3 + this.forkT * 0.1);
-      this.fork.visible = me.alive;
-      if (me.eating && !this.wasEating) this.audio.chew();
-      this.wasEating = me.eating;
-    } else {
-      // Espectador: vista general de la mesa
-      this.camera.position.set(1.9, 1.9, 0);
-      this.camera.lookAt(-0.6, 0.9, 0);
-      this.fork.visible = false;
+    if (this.shot) {
+      this.updateShot(dt);
+      return;
     }
+
+    // Tercera persona: desde el otro extremo de la mesa, de frente al centinela.
+    // Arrastrando se gira un poco alrededor de la mesa.
+    this.placeCamera(this.look.yaw, this.look.pitch, 0);
   }
 
-  // Cinemática: te giras hacia el centinela, levanta la pistola, disparo, caes.
+  placeCamera(yaw, pitch, zoom) {
+    const target = new THREE.Vector3(-1.1, 1.0, 0);
+    const dist = 4.4 - zoom * 1.6;
+    const a = Math.PI / 2 + yaw; // 0 = detrás del extremo de la mesa, mirando a la cabecera
+    this.camera.position.set(
+      target.x + Math.sin(a) * dist * Math.cos(0.3 + pitch),
+      target.y + Math.sin(0.3 + pitch) * dist + 0.4,
+      target.z + Math.cos(a) * dist * Math.cos(0.3 + pitch),
+    );
+    this.camera.lookAt(target);
+  }
+
+  // Cinemática para todos: baja el periódico, saca la pistola, apunta, disparo y
+  // la víctima cae sobre la mesa. A quien disparan, además, se le pone la pantalla roja.
   updateShot(dt) {
     const sh = this.shot;
     sh.t += dt * 1000;
-    const head = new THREE.Vector3(SENTINEL.x, 1.9, 0);
     const p = sh.t / DINNER.shotMs;
-    this.fork.visible = false;
+    const victims = sh.victims.map((id) => this.diners.get(id)).filter(Boolean);
+    const target = victims[0] ? victims[0].head.getWorldPosition(new THREE.Vector3()) : this.camera.position;
+    const iAmHit = sh.victims.includes(this.me);
     const el = document.getElementById('scare');
+    // La cámara se acerca un poco a la escena
+    this.placeCamera(this.look.yaw * (1 - Math.min(1, p * 3)), 0, Math.min(1, p * 3) * 0.6);
+    this.gun.visible = true;
+    this.aimGun(target);
     if (p < 0.4) {
-      // Mira al centinela y la pistola sube hacia ti
-      const look = new THREE.Vector3().lerpVectors(this.camera.position.clone().add(new THREE.Vector3(0, 0, -1)), head, Math.min(1, p * 4));
-      this.camera.lookAt(look);
-      this.camera.fov = 70 - p * 50;
-      this.camera.updateProjectionMatrix();
-      this.gun.visible = true;
-      this.aimGun(this.camera.position);
-      this.gun.position.lerp(this.camera.position, p * 0.6);
+      // La pistola sube despacio hacia la víctima
+      this.gun.position.y -= (1 - p / 0.4) * 0.4;
     } else if (!sh.fired) {
       sh.fired = true;
-      this.audio.gunshot(1.2);
+      this.audio.gunshot(iAmHit ? 1.2 : 0.9);
       this.flash.visible = true;
+      for (const f of victims) f.dead = true;
       el.classList.remove('hidden');
-      el.style.background = 'rgba(255,255,255,0.95)';
+      el.style.background = iAmHit ? 'rgba(255,255,255,0.95)' : 'rgba(255,240,200,0.5)';
     } else {
-      this.flash.visible = false;
-      // Rojo y caída de lado sobre la mesa
-      const q = Math.min(1, (p - 0.4) / 0.4);
-      el.style.background = `rgba(${140 - q * 100},0,0,${0.55 + q * 0.4})`;
-      this.camera.position.y += (TABLE_Y + 0.12 - this.camera.position.y) * Math.min(1, dt * 5);
-      this.camera.rotation.z += (1.2 - this.camera.rotation.z) * Math.min(1, dt * 4);
+      this.flash.visible = sh.t - DINNER.shotMs * 0.4 < 80;
+      const q = Math.min(1, (p - 0.4) / 0.3);
+      el.style.background = iAmHit ? `rgba(${160 - q * 100},0,0,${0.6 - q * 0.25})` : `rgba(255,240,200,${Math.max(0, 0.5 - q)})`;
     }
     if (sh.t >= DINNER.shotMs) {
       el.classList.add('hidden');
       el.style.background = '';
-      this.camera.fov = 70;
-      this.camera.updateProjectionMatrix();
       this.gun.visible = false;
+      this.flash.visible = false;
       this.shot = null;
-      this.toast('Te han pillado. Mira cómo siguen los demás...', 3500);
-      return true; // terminó
+      if (iAmHit) this.toast('Te han pillado. Mira cómo siguen los demás...', 3500);
     }
-    return false;
   }
 
   drag(dx, dy) {
     this.look.yaw = THREE.MathUtils.clamp(this.look.yaw - dx * 0.004, -0.9, 0.9);
-    this.look.pitch = THREE.MathUtils.clamp(this.look.pitch - dy * 0.004, -0.4, 0.5);
+    this.look.pitch = THREE.MathUtils.clamp(this.look.pitch + dy * 0.003, -0.2, 0.5);
   }
 }
 
@@ -405,10 +389,10 @@ function buildFork() {
 }
 
 function setForkPeas(fork, n) {
-  fork.userData.peas.count = Math.min(n, DINNER.peas);
+  fork.userData.peas.count = Math.min(n, 32); // el montón no crece más allá de esto
 }
 
-function buildDiner(seat, info = {}) {
+function buildDiner(seat, info = {}, isMe = false) {
   const group = new THREE.Group();
   group.position.set(seat.x, 0, seat.z);
   group.rotation.y = seat.face < 0 ? 0 : Math.PI;
@@ -432,7 +416,8 @@ function buildDiner(seat, info = {}) {
   g.font = 'bold 34px sans-serif';
   g.textAlign = 'center';
   g.fillStyle = 'rgba(255,255,255,0.85)';
-  g.fillText(info.name ?? '', 128, 44);
+  g.fillStyle = isMe ? 'rgba(255,230,120,0.95)' : 'rgba(255,255,255,0.85)';
+  g.fillText(isMe ? `TÚ · ${info.name ?? ''}` : info.name ?? '', 128, 44);
   const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
   label.scale.set(0.8, 0.2, 1);
   label.position.y = 1.65;

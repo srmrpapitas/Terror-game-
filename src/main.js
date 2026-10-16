@@ -257,7 +257,7 @@ function startDinner(msg) {
   $('touch').classList.add('hidden');
   $('dinner-ui').classList.remove('hidden');
   renderDinnerCount();
-  toast('Carga guisantes mientras lee. Cuando baje el periódico: tenedor vacío y quieto.', 5000);
+  toast('Carga guisantes mientras lee. Cada pinchazo y cada bocado hacen ruido y le hacen bajar antes el periódico.', 5500);
 }
 
 function renderDinnerCount() {
