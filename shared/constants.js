@@ -55,7 +55,7 @@ export const DINNER = {
   watch: [1.8, 3.5], // s mirando
   fakeChance: 0.3, // veces que solo pasa la página y vuelve a leer
   grace: 0.3, // s de margen al bajar el periódico (por el retraso de la red)
-  shotMs: 2400, // duración de la cinemática del disparo
+  shotMs: 3600, // duración de la cinemática del disparo
   // El ruido acorta el tiempo que sigue leyendo (s por cada acción)
   noiseLoad: 0.15, // pinchar un guisante (el tenedor choca con el plato)
   noiseEat: 0.4, // masticar...

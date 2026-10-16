@@ -104,3 +104,12 @@ button.mode.on { background: #8a0d1f; }
 #ranking { margin: 0; padding: 0 0 0 1.4em; text-align: left; font-size: 1.1rem; }
 #ranking li { padding: 4px 0; }
 #ranking li.dead { opacity: 0.6; }
+
+/* Bandas negras de cine para la escena del disparo */
+#cine { position: fixed; inset: 0; z-index: 19; pointer-events: none; }
+#cine .bar { position: absolute; left: 0; right: 0; height: 0; background: #000; transition: height 0.45s ease; }
+#cine .top { top: 0; }
+#cine .bot { bottom: 0; }
+#cine.on .bar { height: 13vh; }
+#d-room { position: absolute; top: max(10px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right)); pointer-events: auto; font-size: 0.85rem; padding: 0.4rem 0.8rem; width: auto; margin: 0; }
+#dinner-ui.cine > * { visibility: hidden; }
