@@ -124,7 +124,7 @@ export class MonsterView {
   // Elige la animación según lo que esté haciendo.
   playFor(state, force = false) {
     if (!this.mixer) return;
-    const want = { chase: 'run', patrol: 'walk', investigate: 'walk', scan: 'turn', scare: 'scream' }[state] || 'idle';
+    const want = { chase: 'run', patrol: 'walk', investigate: 'walk', scan: 'turn', scare: 'scream', notice: 'scream' }[state] || 'idle';
     if (want === 'turn' && !this.clips.turn) return this.playFor('idle', force);
     const action = this.clips[want] || this.clips.walk || this.clips.base;
     if (!action || (action === this.action && !force)) return;

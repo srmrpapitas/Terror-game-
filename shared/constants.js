@@ -29,7 +29,10 @@ export const MONSTER = {
   sightRangeFlashlight: 24, // solo ve la luz de las linternas: si le apuntas, de lejos
   sightRangeGlow: 5, // si la linterna apunta a otro lado, solo el resplandor de cerca
   beamAngle: (70 * Math.PI) / 180,
-  closeSense: 2.5, // a esta distancia te detecta sin linterna, si te mueves
+  closeSense: 2.5, // a esta distancia te detecta sin linterna, si te mueves y estás delante de él
+  closeSenseBehind: 1, // por la espalda solo te nota si casi lo tocas
+  windup: 0.9, // s que tarda en lanzarse a por ti desde que te ve (ruge y se gira)
+  crouchCough: 0.35, // agachado, la tos se ahoga (fracción del ruido)
   catchRange: 1.3,
   loseSightAfter: 1.2, // s sin verte antes de dejar de perseguir (va a donde te vio por última vez)
   hearingError: 0.3, // al oírte solo sabe tu posición aproximada (fracción de la distancia)
