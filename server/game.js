@@ -163,14 +163,22 @@ export class Room {
     };
     if (this.monster && this.phase !== 'lobby') {
       const m = this.monster;
-      snap.m = { p: [round(m.x), round(m.z)], yaw: round(m.yaw), state: m.state, target: m.targetId };
+      snap.m = { p: [round(m.x), round(m.z)], yaw: round(m.yaw), state: m.state, target: m.targetId, anger: round(this.anger()) };
     }
     this.broadcast(snap);
   }
 
+  // Rabia del monstruo: 0 al empezar, 1 con toda la lista cogida. Cuanto más os
+  // lleváis, más rápido corre, más lejos oye y más tiempo persigue antes de pararse.
+  anger() {
+    if (!this.items.length) return 0;
+    return this.items.filter((it) => it.takenBy !== null).length / this.items.length;
+  }
+
   // Ruido que hace ahora un jugador: al moverse, o al toser sin querer.
   noiseOf(p) {
-    return Math.max(p.noise, p.coughing > 0 ? PLAYER.coughNoise : 0);
+    const n = Math.max(p.noise, p.coughing > 0 ? PLAYER.coughNoise : 0);
+    return n * (1 + MONSTER.anger.hearing * this.anger());
   }
 
   // Cada cierto tiempo cada jugador tose aunque esté quieto.
@@ -248,12 +256,12 @@ export class Room {
         }
       }
       m.chaseTime += DT;
-      if (m.chaseTime >= MONSTER.chaseBeforeScan) {
+      if (m.chaseTime >= MONSTER.chaseBeforeScan + MONSTER.anger.chaseLonger * this.anger()) {
         this.startScan();
         return;
       }
       const goal = sees ? target : m.lastKnown;
-      this.moveToward(goal, MONSTER.chaseSpeed);
+      this.moveToward(goal, MONSTER.chaseSpeed * (1 + MONSTER.anger.speed * this.anger()));
       return;
     }
 
@@ -274,7 +282,7 @@ export class Room {
     }
     m.repath -= DT;
 
-    const speed = m.state === 'investigate' ? MONSTER.investigateSpeed : MONSTER.patrolSpeed;
+    const speed = (m.state === 'investigate' ? MONSTER.investigateSpeed : MONSTER.patrolSpeed) * (1 + MONSTER.anger.speed * this.anger());
     if (!m.path.length) {
       if (m.state === 'investigate') {
         // Llegó al sitio del ruido: mira alrededor

@@ -17,7 +17,7 @@ Un juego de terror cooperativo para 1 a 4 amigos: entráis de noche en un superm
 | Linterna | F | Botón Linterna |
 | Coger producto | E | Botón Coger (aparece al estar cerca) |
 
-**El monstruo:** no ve en la oscuridad: te oye si te mueves con el carrito (corriendo 16 m, andando 7 m, agachado 3 m) y ve la luz de tu linterna. Si te quedas totalmente quieto no te ataca, aunque lo tengas delante... pero cada 15 segundos o así se te escapa una tos que se oye a 8 m. Corre más que tú, pero cada 5 segundos de persecución se para y gira 360° buscando objetivos: es el momento de esconderse tras una estantería o quedarse quieto. Si te atrapa, susto y pasas a ser fantasma hasta la siguiente ronda.
+**El monstruo:** no ve en la oscuridad: te oye si te mueves con el carrito (corriendo 16 m, andando 7 m, agachado 3 m) y ve la luz de tu linterna. Si te quedas totalmente quieto no te ataca, aunque lo tengas delante... pero cada 15 segundos o así se te escapa una tos que se oye a 8 m. Corre más que tú, pero cada 5 segundos de persecución se para y gira 360° buscando objetivos: es el momento de esconderse tras una estantería o quedarse quieto. Cuantos más productos de la lista os lleváis, más se enfada: corre más, oye más lejos y persigue más rato. Si te atrapa, susto y pasas a ser fantasma hasta la siguiente ronda.
 
 ## Ejecutarlo
 

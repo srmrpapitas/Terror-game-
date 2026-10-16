@@ -27,7 +27,7 @@ export class LocalPlayer {
     this.onStep = null;
     this.onUse = null;
 
-    this.flashlight = new THREE.SpotLight(0xfff2d8, 30, 22, 0.42, 0.45, 1.5);
+    this.flashlight = new THREE.SpotLight(0xfff2d8, 70, 34, 0.48, 0.4, 1.3);
     this.flashlight.position.set(0.15, -0.2, 0);
     this.flashlight.target.position.set(0, -0.3, -3);
     camera.add(this.flashlight, this.flashlight.target);
@@ -116,7 +116,7 @@ export class LocalPlayer {
 
     // Linterna: parpadea un poco al quedarse sin estamina
     const flick = this.stamina < 0.15 ? 0.85 + Math.random() * 0.15 : 1;
-    this.flashlight.intensity = this.light && this.alive ? 30 * flick : 0;
+    this.flashlight.intensity = this.light && this.alive ? 70 * flick : 0;
   }
 
   get noise() {

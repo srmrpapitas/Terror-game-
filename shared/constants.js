@@ -33,6 +33,8 @@ export const MONSTER = {
   startDelay: 10, // s quieto al empezar la ronda
   feedDuration: 4, // s quieto tras atrapar a alguien
   turnSpeed: 6, // rad/s
+  // Con toda la lista cogida: +30 % de velocidad, +50 % de oído y 2 s más persiguiendo
+  anger: { speed: 0.3, hearing: 0.5, chaseLonger: 2 },
 };
 
 export const JUMPSCARE_MS = 2600;

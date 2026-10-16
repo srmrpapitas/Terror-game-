@@ -9,7 +9,7 @@ export function buildWorld(scene, { lowQuality }) {
   // Niebla: empieza a espesar a ~9 m y es opaca hacia los 32 m (ver documento de diseño)
   scene.fog = new THREE.Fog(FOG_COLOR, lowQuality ? 7 : 9, lowQuality ? 30 : 34);
 
-  scene.add(new THREE.HemisphereLight(0x8a96a8, 0x2a2018, 0.55));
+  scene.add(new THREE.HemisphereLight(0x6a7488, 0x1a1410, 0.05));
 
   // Suelo de baldosas y techo
   const floorTex = canvasTexture(256, (g, s) => {
@@ -56,7 +56,7 @@ export function buildWorld(scene, { lowQuality }) {
   // Obstáculos
   const mats = {
     wall: new THREE.MeshLambertMaterial({ map: wallpaperTexture() }),
-    fridge: new THREE.MeshLambertMaterial({ map: fridgeTexture(), emissive: 0x9fd8ff, emissiveIntensity: 0.18 }),
+    fridge: new THREE.MeshLambertMaterial({ map: fridgeTexture(), emissive: 0x9fd8ff, emissiveIntensity: 0.07 }),
     crate: new THREE.MeshLambertMaterial({ map: crateTexture() }),
     checkout: new THREE.MeshLambertMaterial({ color: 0x3a3f46 }),
     promo: new THREE.MeshLambertMaterial({ color: 0xb0281e }),
@@ -97,9 +97,11 @@ export function buildWorld(scene, { lowQuality }) {
 
   // Fluorescentes: paneles en el techo + unas pocas luces reales que parpadean
   const lamps = buildLamps(scene, lowQuality);
+  const bulbs = buildHangingLamps(scene);
 
   return {
     lamps,
+    bulbs,
     setExitOpen(open, t) {
       exitMat.opacity = open ? 0.25 + Math.sin(t * 4) * 0.12 : 0;
     },
@@ -108,7 +110,7 @@ export function buildWorld(scene, { lowQuality }) {
 
 function buildLamps(scene, lowQuality) {
   const panelGeo = new THREE.BoxGeometry(0.4, 0.06, 2.4);
-  const panelOn = new THREE.MeshBasicMaterial({ color: 0xe8f0ff });
+  const panelOn = new THREE.MeshBasicMaterial({ color: 0x9aa2b0 });
   const panelOff = new THREE.MeshBasicMaterial({ color: 0x222222 });
   const lamps = [];
   const spots = [];
@@ -127,7 +129,7 @@ function buildLamps(scene, lowQuality) {
     scene.add(panel);
     let light = null;
     if (lit.has(i)) {
-      light = new THREE.PointLight(0xdfe8ff, 14, 13, 1.6);
+      light = new THREE.PointLight(0xdfe8ff, 3, 8, 1.8);
       light.position.set(s.x, CEILING - 0.4, s.z);
       scene.add(light);
     }
@@ -141,6 +143,67 @@ function buildLamps(scene, lowQuality) {
     });
   });
   return lamps;
+}
+
+// Bombillas colgantes en los pasillos: una en el centro y otra en una esquina de
+// cada pasillo. Alumbran poco (un charco de luz en el suelo, sin luces reales para
+// que vaya fluido en móvil) y parpadean: a veces encendidas, a veces apagadas.
+function buildHangingLamps(scene) {
+  const bulbs = [];
+  const cordMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+  const shadeMat = new THREE.MeshLambertMaterial({ color: 0x2b2f2a, side: THREE.DoubleSide });
+  const glowTex = canvasTexture(64, (g, s) => {
+    const gr = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+    gr.addColorStop(0, 'rgba(255,220,150,1)');
+    gr.addColorStop(0.25, 'rgba(255,190,110,0.45)');
+    gr.addColorStop(1, 'rgba(255,170,90,0)');
+    g.fillStyle = gr;
+    g.fillRect(0, 0, s, s);
+  });
+  glowTex.wrapS = glowTex.wrapT = THREE.ClampToEdgeWrapping;
+  const spots = [];
+  let n = 0;
+  for (let x = 8; x <= 44; x += 4) {
+    // Centro del pasillo, alternando mitad de arriba y de abajo
+    spots.push({ x, z: n % 2 ? 13 : 23.8 });
+    // Esquina: al final del pasillo, pegada a una estantería
+    spots.push({ x: x + (n % 2 ? 1.2 : -1.2), z: n % 2 ? 27.3 : 9.7 });
+    n++;
+  }
+  for (const sp of spots) {
+    const y = 2.9;
+    const g = new THREE.Group();
+    g.position.set(sp.x, 0, sp.z);
+    const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, CEILING - y), cordMat);
+    cord.position.y = (CEILING + y) / 2;
+    const shade = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.18, 12, 1, true), shadeMat);
+    shade.position.y = y + 0.05;
+    const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), bulbMat);
+    bulb.position.y = y - 0.04;
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTex, color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    }));
+    glow.scale.set(1.3, 1.3, 1);
+    glow.position.y = y - 0.04;
+    const pool = new THREE.Mesh(
+      new THREE.PlaneGeometry(4.2, 4.2),
+      new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending }),
+    );
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.y = 0.015;
+    g.add(cord, shade, bulb, glow, pool);
+    scene.add(g);
+    bulbs.push({
+      on: Math.random() < 0.6, timer: Math.random() * 4, flick: 0,
+      setLevel(k) {
+        bulbMat.color.setHex(k > 0.5 ? 0xffd9a0 : 0x3a3020);
+        glow.material.opacity = k;
+        pool.material.opacity = 0.22 * k;
+      },
+    });
+  }
+  return bulbs;
 }
 
 // Productos decorativos en las estanterías (un único InstancedMesh, muy barato de dibujar).
