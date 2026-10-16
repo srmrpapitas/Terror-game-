@@ -4,6 +4,7 @@ import { MonsterView } from './monster.js';
 import { LocalPlayer } from './player.js';
 import { Audio } from './audio.js';
 import { Net } from './net.js';
+import { buildCart, addToCart, emptyCart } from './cart.js';
 import { SPAWN, inExitZone } from '../shared/map.js';
 import { PLAYER, JUMPSCARE_MS, TICK_RATE } from '../shared/constants.js';
 
@@ -17,7 +18,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isTouch, powerPre
 renderer.setPixelRatio(Math.min(devicePixelRatio, isTouch ? 1 : 1.5));
 renderer.setSize(innerWidth, innerHeight);
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.05, isTouch ? 24 : 30);
+const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.05, isTouch ? 34 : 40);
 scene.add(camera);
 addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
@@ -29,12 +30,17 @@ const world = buildWorld(scene, { lowQuality: isTouch });
 const monster = new MonsterView(scene);
 const player = new LocalPlayer(camera, canvas, isTouch);
 const audio = new Audio();
+// Tu carrito: va delante de ti y en él se ven los productos que coges
+const myCart = buildCart();
+scene.add(myCart);
+const _cartPrev = new THREE.Vector3();
 
 // El anfitrión no puede empezar hasta tener el monstruo cargado (el FBX pesa ~12 MB)
 $('loading').classList.remove('hidden');
 $('btn-start').disabled = true;
 $('btn-start').textContent = 'Cargando al monstruo...';
-monster.load('/models/warrok.fbx', () => {
+monster.load('/models/warrok.fbx', (ok) => {
+  if (!ok) toast('No se pudo cargar el monstruo: se usa la figura provisional', 6000);
   $('loading').classList.add('hidden');
   $('btn-start').disabled = false;
   $('btn-start').textContent = 'Empezar';
@@ -162,12 +168,22 @@ function onMessage(msg) {
       if (it) {
         it.data.takenBy = msg.by;
         scene.remove(it.mesh);
+        const cart = msg.by === myId ? myCart : remotes.get(msg.by)?.cart;
+        if (cart) addToCart(cart, it.data.color);
       }
       if (msg.by === myId) audio.pickup();
       toast(`${msg.by === myId ? 'Has cogido' : msg.name + ' ha cogido'}: ${it?.data.name ?? ''}`);
       renderList();
       break;
     }
+    case 'cough':
+      if (msg.id === myId) {
+        audio.cough(null);
+        toast('*cof, cof* ...se te ha escapado una tos', 1800);
+      } else {
+        audio.cough({ x: msg.p[0], y: 1.5, z: msg.p[1] });
+      }
+      break;
     case 'roar':
       audio.roar(monster.root.position.x, monster.root.position.z);
       if (msg.target === myId) toast('¡TE HA VISTO! ¡CORRE!', 1500);
@@ -190,6 +206,8 @@ function startRound(msg) {
   phase = 'playing';
   for (const it of items.values()) scene.remove(it.mesh);
   items = new Map();
+  emptyCart(myCart);
+  for (const r of remotes.values()) emptyCart(r.cart);
   for (const d of msg.items) {
     const mesh = new THREE.Mesh(
       new THREE.BoxGeometry(0.28, 0.32, 0.28),
@@ -300,7 +318,9 @@ function addRemote(p) {
   }
   group.position.set(p.p[0], 0, p.p[2]);
   scene.add(group);
-  const r = { group, body, mat, light, target: new THREE.Vector3(p.p[0], 0, p.p[2]), yaw: p.yaw, stepDist: 0, alive: true };
+  const cart = buildCart();
+  scene.add(cart);
+  const r = { group, body, mat, light, cart, target: new THREE.Vector3(p.p[0], 0, p.p[2]), yaw: p.yaw, stepDist: 0, alive: true };
   remotes.set(p.id, r);
   return r;
 }
@@ -309,6 +329,7 @@ function removeRemote(id) {
   const r = remotes.get(id);
   if (!r) return;
   scene.remove(r.group);
+  scene.remove(r.cart);
   remotes.delete(id);
 }
 
@@ -337,6 +358,7 @@ function updateRemotes(dt) {
     r.group.rotation.y += d * k;
     r.group.scale.y += ((r.crouch ? 0.65 : 1) - r.group.scale.y) * k;
     r.mat.opacity = r.alive ? 1 : 0.2;
+    placeCart(r.cart, r.group.position, r.group.rotation.y, r.alive);
     if (r.light) r.light.intensity = r.alive && r.lightOn ? 20 : 0;
     // Pasos de los compañeros, en 3D
     if (r.alive) {
@@ -348,6 +370,20 @@ function updateRemotes(dt) {
       }
     }
   }
+}
+
+function placeCart(cart, pos, facing, visible) {
+  cart.visible = visible;
+  cart.position.set(pos.x + Math.sin(facing) * 0.45, 0, pos.z + Math.cos(facing) * 0.45);
+  cart.rotation.y = facing;
+}
+
+// Tu carrito sigue a la cámara; al moverte traquetea (y el monstruo lo oye).
+function updateMyCart(dt) {
+  placeCart(myCart, player.pos, player.facing, player.alive && phase === 'playing');
+  const speed = myCart.visible ? _cartPrev.distanceTo(myCart.position) / Math.max(dt, 1e-3) : 0;
+  _cartPrev.copy(myCart.position);
+  audio.cartRattle(Math.min(speed, 8), player.crouch);
 }
 
 // ---- Fantasma y susto ----
@@ -476,6 +512,7 @@ function frame() {
   }
 
   updateRemotes(dt);
+  updateMyCart(dt);
   const monsterMoved = monster.update(dt, time);
   if (monster.root.visible && !scare) {
     monster.stepDist += monsterMoved;
@@ -557,5 +594,8 @@ function updateLamps(dt) {
     lamp.setOn(lamp.off <= 0);
   }
 }
+
+// Acceso para depurar desde la consola del navegador
+window.__uc = { monster, player, camera, scene };
 
 frame();

@@ -8,11 +8,13 @@ export const PLAYER = {
   eyeHeight: 1.65,
   crouchEyeHeight: 1.0,
   speed: { crouch: 1.8, walk: 3.5, run: 6.5 },
-  // Radio (m) en el que el monstruo oye cada forma de moverse
-  noise: { idle: 0, crouch: 1.5, walk: 5, run: 14 },
+  // Radio (m) en el que el monstruo oye cada forma de moverse (con el carrito traqueteando)
+  noise: { idle: 0, crouch: 3, walk: 7, run: 16 },
   staminaSeconds: 6,
   staminaRegen: 0.12, // fracción de la barra recuperada por segundo (~8 s para llenarla)
   pickupRange: 2.2,
+  coughEvery: 15, // s (±25 %) entre toses involuntarias
+  coughNoise: 8, // m a los que se oye una tos
 };
 
 export const MONSTER = {
@@ -24,9 +26,8 @@ export const MONSTER = {
   chaseBeforeScan: 5, // s persiguiendo antes de pararse
   scanDuration: 2, // s girando 360°
   fov: (110 * Math.PI) / 180,
-  sightRange: 18,
-  sightRangeFlashlight: 26,
-  closeSense: 2.5, // a esta distancia te detecta aunque no te vea
+  sightRangeFlashlight: 24, // solo ve la luz de las linternas
+  closeSense: 2.5, // a esta distancia te detecta sin linterna, si te mueves
   catchRange: 1.3,
   loseSightAfter: 3, // s sin verte antes de dejar de perseguir
   startDelay: 10, // s quieto al empezar la ronda

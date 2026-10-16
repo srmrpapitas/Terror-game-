@@ -71,6 +71,84 @@ export class Audio {
     }
   }
 
+  // Tos: dos o tres golpes de ruido filtrado con una vocal grave. `pos` null = la tuya.
+  cough(pos) {
+    if (!this.ready) return;
+    const out = pos ? this.panner(pos.x, pos.y, pos.z, 2, 1.2, 2) : this.master;
+    const t0 = this.ctx.currentTime;
+    const n = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < n; i++) {
+      const t = t0 + i * (0.28 + Math.random() * 0.08);
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.noise;
+      const f = this.ctx.createBiquadFilter();
+      f.type = 'bandpass';
+      f.frequency.value = 700 + Math.random() * 300;
+      f.Q.value = 1.2;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(pos ? 0.9 : 0.5, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+      src.connect(f).connect(g).connect(out);
+      src.start(t, Math.random());
+      src.stop(t + 0.25);
+      const o = this.ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(160, t);
+      o.frequency.exponentialRampToValueAtTime(90, t + 0.18);
+      const og = this.ctx.createGain();
+      og.gain.setValueAtTime(0.0001, t);
+      og.gain.exponentialRampToValueAtTime(pos ? 0.2 : 0.1, t + 0.02);
+      og.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      o.connect(og).connect(out);
+      o.start(t);
+      o.stop(t + 0.2);
+    }
+  }
+
+  // Traqueteo del carrito: ruido metálico filtrado que sube con la velocidad,
+  // con algún golpe suelto de la rejilla. `speed` en m/s.
+  cartRattle(speed, careful = false) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    if (!this.cart) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.noise;
+      src.loop = true;
+      const band = this.ctx.createBiquadFilter();
+      band.type = 'bandpass';
+      band.frequency.value = 2600;
+      band.Q.value = 2.5;
+      const rumble = this.ctx.createBiquadFilter();
+      rumble.type = 'lowpass';
+      rumble.frequency.value = 180;
+      const gHi = this.ctx.createGain();
+      const gLo = this.ctx.createGain();
+      gHi.gain.value = gLo.gain.value = 0;
+      src.connect(band).connect(gHi).connect(this.master);
+      src.connect(rumble).connect(gLo).connect(this.master);
+      src.start();
+      this.cart = { gHi, gLo, band };
+    }
+    const k = Math.min(1, speed / 6) * (careful ? 0.4 : 1);
+    const jitter = 0.7 + Math.random() * 0.6;
+    this.cart.gHi.gain.setTargetAtTime(k * 0.07 * jitter, t, 0.05);
+    this.cart.gLo.gain.setTargetAtTime(k * 0.5, t, 0.08);
+    this.cart.band.frequency.setTargetAtTime(2200 + Math.random() * 1200, t, 0.05);
+    // Golpe de rejilla de vez en cuando
+    if (speed > 1 && Math.random() < 0.012 * (careful ? 0.3 : 1) * speed) {
+      const o = this.ctx.createOscillator();
+      o.type = 'square';
+      o.frequency.value = 900 + Math.random() * 900;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.05 * k, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+      o.connect(g).connect(this.master);
+      o.start(t);
+      o.stop(t + 0.08);
+    }
+  }
+
   // Un paso: golpe grave + roce. `pos` null = tus propios pasos (sin posición).
   footstep(pos, { volume = 0.5, heavy = false } = {}) {
     if (!this.ready) return;

@@ -16,6 +16,8 @@ export class MonsterView {
     this.action = null;
     this.clips = {};
     this.head = null;
+    this.feet = []; // huesos de los pies, para apoyarlo en el suelo
+    this.groundY = 0;
     this.has = false; // ya llegó al menos una posición
     this.stepDist = 0;
     this.lastPos = new THREE.Vector3();
@@ -25,16 +27,16 @@ export class MonsterView {
     const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff1a1a, fog: false });
     for (const x of [-0.09, 0.09]) {
       const eye = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), eyeMat);
-      eye.position.set(x, 0, 0.14);
+      eye.position.set(x, 0, 0);
       this.eyes.add(eye);
     }
-    this.faceLight = new THREE.PointLight(0xff2020, 0, 5, 2);
+    this.faceLight = new THREE.PointLight(0xff2020, 0, 12, 1.2);
     this.eyes.add(this.faceLight);
 
     this.placeholder = buildPlaceholder();
     this.root.add(this.placeholder);
     this.placeholder.add(this.eyes);
-    this.eyes.position.set(0, 2.35, 0.1);
+    this.eyes.position.set(0, 2.35, 0.3);
   }
 
   load(url, onDone) {
@@ -45,7 +47,7 @@ export class MonsterView {
         const h = box.max.y - box.min.y || 1;
         const s = MONSTER.height / h;
         fbx.scale.setScalar(s);
-        fbx.position.y = -box.min.y * s;
+        fbx.position.y = this.groundY = -box.min.y * s;
         fbx.traverse((o) => {
           if (o.isMesh) {
             o.frustumCulled = false; // los huesos mueven la malla fuera de su caja original
@@ -53,26 +55,33 @@ export class MonsterView {
             for (const m of mats) {
               m.fog = true;
               if (m.shininess !== undefined) m.shininess = 8;
+              // Un brillo rojizo muy tenue para que su silueta se intuya en la oscuridad
+              if (m.emissive) m.emissive.setHex(0x4a100a);
             }
           }
           if (o.isBone && /head$/i.test(o.name) && !this.head) this.head = o;
+          if (o.isBone && /(foot|toebase)$/i.test(o.name)) this.feet.push(o);
         });
         this.root.remove(this.placeholder);
         this.root.add(fbx);
         this.model = fbx;
-        if (this.head) {
-          // Los ojos van pegados a la cabeza del esqueleto
-          this.head.add(this.eyes);
-          this.eyes.position.set(0, 8, 9);
-          this.eyes.scale.setScalar(1 / s);
-          this.eyes.updateMatrixWorld();
-        } else {
-          fbx.add(this.eyes);
-          this.eyes.position.set(0, (MONSTER.height * 0.9) / s, 0.15 / s);
-          this.eyes.scale.setScalar(1 / s);
-        }
-        // Los ojos de bola solo hacen falta con la figura provisional; el modelo ya tiene cara
-        for (const eye of this.eyes.children) if (eye.isMesh) eye.visible = false;
+        // Ojos rojos que brillan en la oscuridad, pegados a la cabeza del esqueleto.
+        // Se colocan en coordenadas del mundo y se pasan al espacio del hueso.
+        fbx.updateMatrixWorld(true);
+        const parent = this.head || fbx;
+        const headPos = new THREE.Vector3();
+        if (this.head) this.head.getWorldPosition(headPos);
+        else headPos.set(0, MONSTER.height * 0.88, 0);
+        parent.add(this.eyes);
+        const local = parent.worldToLocal(headPos.clone().add(new THREE.Vector3(0, 0.06, 0.2)));
+        this.eyes.position.copy(local);
+        const ws = new THREE.Vector3();
+        parent.getWorldScale(ws);
+        this.eyes.scale.setScalar(1 / ws.x);
+        // Que miren hacia donde mira el monstruo, sea cual sea el giro del hueso
+        const pq = new THREE.Quaternion();
+        parent.getWorldQuaternion(pq);
+        this.eyes.quaternion.copy(pq.invert());
         this.mixer = new THREE.AnimationMixer(fbx);
         if (fbx.animations.length) this.addClip('base', fbx.animations[0]);
         this.loadAnimations();
@@ -164,13 +173,29 @@ export class MonsterView {
       if (this.action && this.state === 'chase' && !this.clips.run) this.action.timeScale = 1.8;
       else if (this.action) this.action.timeScale = 1;
       this.mixer.update(dt);
+      this.groundFeet(dt);
     }
     // Balanceo al andar para que no parezca que se desliza
     const body = this.model || this.placeholder;
     body.rotation.z = Math.sin(time * (speed > 5 ? 9 : 4)) * Math.min(0.06, speed * 0.008);
-    const eyeGlow = this.state === 'chase' ? 3 : 1;
+    // Halo rojo alrededor del monstruo: avisa de que está cerca aunque no lo mires
+    const eyeGlow = this.state === 'chase' ? 6 : 3;
     this.faceLight.intensity = eyeGlow * (0.8 + Math.sin(time * 20) * 0.2);
     return moved;
+  }
+
+  // Las animaciones de Mixamo no siempre dejan los pies a la altura del suelo (y el
+  // monstruo parece flotar): se baja o sube el modelo para que el pie más bajo toque el suelo.
+  groundFeet(dt) {
+    if (!this.model || !this.feet.length) return;
+    this.model.updateMatrixWorld(true);
+    let low = Infinity;
+    const v = new THREE.Vector3();
+    for (const b of this.feet) low = Math.min(low, b.getWorldPosition(v).y);
+    // El hueso está dentro del pie: unos centímetros por encima de la suela
+    const err = low - this.root.position.y - 0.08;
+    const k = 1 - Math.exp(-dt * 10);
+    this.model.position.y -= err * k;
   }
 
   headWorldPosition(out) {
