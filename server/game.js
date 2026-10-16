@@ -6,6 +6,7 @@ import {
 } from '../shared/map.js';
 import { PLAYER, MONSTER, TICK_RATE, MAX_PLAYERS, JUMPSCARE_MS } from '../shared/constants.js';
 import { findPath, clearPath } from './nav.js';
+import { Dinner } from './dinner.js';
 
 const DT = 1 / TICK_RATE;
 const PLAYER_COLORS = [0x4fc3f7, 0xffb74d, 0xaed581, 0xf06292];
@@ -19,6 +20,8 @@ export class Room {
     this.items = [];
     this.monster = null;
     this.hostId = null;
+    this.mode = 'market'; // market (supermercado) | dinner (la cena)
+    this.dinner = null;
     this.endTimer = 0;
     this.interval = setInterval(() => this.tick(), 1000 / TICK_RATE);
   }
@@ -40,13 +43,17 @@ export class Room {
     this.players.set(id, player);
     if (!this.hostId) this.hostId = id;
     send({ t: 'joined', code: this.code, id, host: this.hostId === id, color });
-    if (this.phase === 'playing') send(this.roundMessage());
+    if (this.phase === 'playing') {
+      this.dinner?.addSpectator(id);
+      send(this.roundMessage());
+    }
     this.broadcastLobby();
     return true;
   }
 
   removePlayer(id) {
     this.players.delete(id);
+    this.dinner?.remove(id);
     if (this.monster?.targetId === id) this.monster.targetId = null;
     if (this.hostId === id) this.hostId = this.players.keys().next().value ?? null;
     if (this.players.size === 0) {
@@ -64,6 +71,17 @@ export class Room {
     switch (msg.t) {
       case 'start':
         if (id === this.hostId && this.phase !== 'playing') this.startRound();
+        break;
+      case 'mode':
+        if (id === this.hostId && this.phase !== 'playing' && (msg.mode === 'market' || msg.mode === 'dinner')) {
+          this.mode = msg.mode;
+          this.broadcastLobby();
+        }
+        break;
+      case 'load':
+      case 'eat':
+      case 'drop':
+        if (this.phase === 'playing' && this.dinner) this.dinner.handle(id, msg);
         break;
       case 'state': {
         if (!Array.isArray(msg.p) || msg.p.length !== 3 || !msg.p.every(Number.isFinite)) return;
@@ -90,6 +108,8 @@ export class Room {
   // ---- Ronda ----
 
   startRound() {
+    if (this.mode === 'dinner') return this.startDinner();
+    this.dinner = null;
     const spots = [...ITEM_SPOTS].sort(() => Math.random() - 0.5);
     const products = [...PRODUCTS].sort(() => Math.random() - 0.5).slice(0, ITEMS_PER_ROUND);
     // Productos separados entre sí para obligar a recorrer la tienda
@@ -127,8 +147,20 @@ export class Room {
     this.broadcast(this.roundMessage());
   }
 
+  startDinner() {
+    for (const p of this.players.values()) p.alive = true;
+    this.monster = null;
+    this.items = [];
+    this.dinner = new Dinner(this);
+    this.phase = 'playing';
+    this.endTimer = 0;
+    this.broadcast(this.roundMessage());
+  }
+
   roundMessage() {
+    if (this.dinner) return { t: 'round', mode: 'dinner', d: this.dinner.snapshot() };
     return {
+      mode: 'market',
       t: 'round',
       items: this.items.map(({ id, name, color, x, y, z, takenBy }) => ({ id, name, color, x, y, z, takenBy })),
     };
@@ -136,6 +168,13 @@ export class Room {
 
   checkEnd() {
     if (this.phase !== 'playing') return;
+    if (this.dinner) {
+      if (this.dinner.over()) {
+        this.phase = 'ended';
+        this.broadcast({ t: 'end', result: 'dinner', ranking: this.dinner.ranking() });
+      }
+      return;
+    }
     const alive = [...this.players.values()].filter((p) => p.alive);
     const allTaken = this.items.every((it) => it.takenBy !== null);
     let result = null;
@@ -152,7 +191,8 @@ export class Room {
 
   tick() {
     if (this.phase === 'playing') {
-      this.updateMonster();
+      if (this.dinner) this.dinner.tick(DT);
+      else this.updateMonster();
       this.checkEnd();
     }
     const snap = {
@@ -164,6 +204,7 @@ export class Room {
         alive: p.alive, crouch: p.crouch, light: p.light, noise: p.noise,
       })),
     };
+    if (this.dinner) snap.d = this.dinner.snapshot();
     if (this.monster && this.phase !== 'lobby') {
       const m = this.monster;
       snap.m = { p: [round(m.x), round(m.z)], yaw: round(m.yaw), state: m.state, target: m.targetId, anger: round(this.anger()) };
@@ -437,6 +478,7 @@ export class Room {
       t: 'lobby',
       host: this.hostId,
       phase: this.phase,
+      mode: this.mode,
       players: [...this.players.values()].map((p) => ({ id: p.id, name: p.name, color: p.color })),
     });
   }

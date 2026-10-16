@@ -174,3 +174,37 @@ test('siempre hay productos para toda la lista', () => {
     assert.ok(room.items.every((it) => Number.isFinite(it.x)));
   }
 });
+
+test('la cena: comer leyendo, disparo si mira y ranking', () => {
+  const room = new Room('TEST', () => {});
+  clearInterval(room.interval);
+  const inbox = [];
+  room.addPlayer('1', 'Ana', (m) => inbox.push(m));
+  room.addPlayer('2', 'Beto', () => {});
+  room.handle('1', { t: 'mode', mode: 'dinner' });
+  room.handle('1', { t: 'start' });
+  const d = room.dinner;
+  assert.ok(d);
+  const ana = d.players.get('1'), beto = d.players.get('2');
+  const tick = (s) => { for (let i = 0; i < s * TICK_RATE; i++) room.tick(); };
+
+  // Mientras lee, Ana se come todo el plato a tandas
+  d.sentinel.timer = 999;
+  while (ana.peas > 0) {
+    for (let i = 0; i < 10; i++) { room.handle('1', { t: 'load' }); tick(0.15); }
+    room.handle('1', { t: 'eat' });
+    tick(2);
+  }
+  assert.equal(ana.place, 1);
+
+  // Beto carga el tenedor y el centinela baja el periódico: disparo
+  room.handle('2', { t: 'load' });
+  d.setSentinel('watching', 2);
+  d.sentinel.duration = 2;
+  tick(1);
+  assert.equal(beto.alive, false);
+  assert.ok(inbox.some((m) => m.t === 'shot' && m.id === '2'));
+  const end = inbox.find((m) => m.t === 'end');
+  assert.equal(end.result, 'dinner');
+  assert.deepEqual(end.ranking.map((r) => r.name), ['Ana', 'Beto']);
+});

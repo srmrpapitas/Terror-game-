@@ -19,6 +19,19 @@ Un juego de terror cooperativo para 1 a 4 amigos: entráis de noche en un superm
 
 **El monstruo:** no ve en la oscuridad: te oye si te mueves con el carrito y ve tu linterna si le apuntas con ella (si apunta a otro lado, solo de muy cerca) (corriendo 16 m, andando 7 m, agachado 3 m) y ve la luz de tu linterna. Si te quedas totalmente quieto no te ataca, aunque lo tengas delante... pero cada 15 segundos o así se te escapa una tos que se oye a 8 m. Corre más que tú, pero cada 5 segundos de persecución se para y gira 360° buscando objetivos: es el momento de esconderse tras una estantería o quedarse quieto. Si doblas una esquina y deja de verte, va a donde te vio por última vez y desde ahí solo te sigue por el oído, más despacio. Cuantos más productos de la lista os lleváis, más se enfada: corre más, oye más lejos y persigue más rato. Si te atrapa, susto y pasas a ser fantasma hasta la siguiente ronda.
 
+## La Cena (segundo juego)
+
+En la sala, el anfitrión elige **Supermercado** o **La Cena**. En La Cena estáis sentados a la mesa, unos enfrente de otros, con un plato de guisantes cada uno. En la cabecera, el monstruo lee el periódico. Mientras lee, carga guisantes en el tenedor (**Cargar**, o mantenerlo pulsado) y cómetelos (**Comer**). Cuando hace ruido con el periódico es que lo va a bajar: si al bajarlo te ve comiendo o con el tenedor cargado, te dispara (**Soltar** devuelve los guisantes al plato). A veces solo pasa la página. Los demás siguen hasta limpiar el plato, y al final hay clasificación: primero quien termina antes, y después los eliminados según cuánto aguantaron.
+
+| Acción | PC | Móvil |
+| --- | --- | --- |
+| Cargar un guisante | Clic o Espacio (mantener para varios) | Botón Cargar |
+| Comer | E | Botón Comer |
+| Soltar | Q | Botón Soltar |
+| Mirar | Arrastrar | Arrastrar |
+
+Los tiempos del centinela están en `DINNER` en `shared/constants.js`.
+
 ## Ejecutarlo
 
 Necesita Node.js 18 o superior. Antes de empezar, copia el monstruo de Mixamo en `public/models/` (instrucciones en [public/models/LEEME.md](public/models/LEEME.md)); sin él se usa una figura provisional.

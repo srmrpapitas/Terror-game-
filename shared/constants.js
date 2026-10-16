@@ -41,3 +41,19 @@ export const MONSTER = {
 };
 
 export const JUMPSCARE_MS = 2600;
+
+// Modo "La Cena": comer guisantes sin que te vea el centinela del periódico.
+export const DINNER = {
+  peas: 30, // guisantes en cada plato
+  loadInterval: 0.12, // s mínimos entre guisante y guisante
+  eatBase: 0.45, // s que tardas en llevarte el tenedor a la boca...
+  eatPerPea: 0.06, // ...más esto por cada guisante
+  dropTime: 0.25, // s para soltar los guisantes en el plato
+  firstRead: [4, 6], // s leyendo al empezar
+  read: [2.5, 7], // s leyendo el periódico
+  warning: [0.7, 1.3], // s haciendo ruido con el periódico antes de bajarlo
+  watch: [1.8, 3.5], // s mirando
+  fakeChance: 0.3, // veces que solo pasa la página y vuelve a leer
+  grace: 0.3, // s de margen al bajar el periódico (por el retraso de la red)
+  shotMs: 2400, // duración de la cinemática del disparo
+};

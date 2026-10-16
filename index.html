@@ -28,6 +28,14 @@
     <div id="menu-lobby" class="panel hidden">
       <p>Sala <strong id="lobby-code"></strong></p>
       <button id="btn-share" class="secondary">Copiar enlace de invitación</button>
+      <div id="mode-pick">
+        <p class="hint">Juego</p>
+        <div class="row">
+          <button id="mode-market" class="mode on">Supermercado</button>
+          <button id="mode-dinner" class="mode">La Cena</button>
+        </div>
+        <p id="mode-desc" class="hint"></p>
+      </div>
       <ul id="lobby-players"></ul>
       <button id="btn-start" class="hidden">Empezar</button>
       <p id="lobby-wait" class="hint">Esperando a que el anfitrión empiece...</p>
@@ -45,11 +53,12 @@
     <div id="room-tag"></div>
     <div id="stamina"><div id="stamina-fill"></div></div>
     <div id="prompt"></div>
-    <div id="toast"></div>
     <div id="crosshair"></div>
     <div id="vignette"></div>
     <div id="click-to-play" class="hidden">Haz clic para jugar</div>
   </div>
+
+  <div id="toast"></div>
 
   <!-- Controles táctiles -->
   <div id="touch" class="hidden">
@@ -63,12 +72,25 @@
     </div>
   </div>
 
+  <!-- La Cena -->
+  <div id="dinner-ui" class="hidden">
+    <div id="dinner-count"></div>
+    <div id="dinner-buttons">
+      <button id="d-drop">Soltar</button>
+      <button id="d-eat">Comer</button>
+      <button id="d-load">Cargar</button>
+    </div>
+    <p class="desktop-only dinner-keys">Clic o Espacio: cargar guisante · E: comer · Q: soltar · Arrastra para mirar</p>
+  </div>
+
   <!-- Susto y fin de ronda -->
   <div id="scare" class="hidden"></div>
   <div id="end" class="screen hidden">
     <h1 id="end-title"></h1>
     <p id="end-text"></p>
+    <ol id="ranking" class="hidden"></ol>
     <button id="btn-again" class="hidden">Jugar otra vez</button>
+    <button id="btn-switch" class="hidden secondary"></button>
     <p id="end-wait" class="hint">Esperando al anfitrión...</p>
   </div>
   <div id="loading" class="hidden">Cargando al monstruo...</div>
