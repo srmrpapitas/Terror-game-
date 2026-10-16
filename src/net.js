@@ -1,8 +1,10 @@
 // Conexión WebSocket con el servidor de la sala.
 export class Net {
-  constructor(onMessage, onClose) {
+  // `code`: sala a la que unirse (en Cloudflare decide a qué servidor de sala conectar).
+  constructor(onMessage, onClose, code = null) {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    this.ws = new WebSocket(`${proto}://${location.host}/ws`);
+    const query = code ? `?sala=${encodeURIComponent(code)}` : '';
+    this.ws = new WebSocket(`${proto}://${location.host}/ws${query}`);
     this.open = new Promise((resolve, reject) => {
       this.ws.onopen = resolve;
       this.ws.onerror = reject;

@@ -101,7 +101,7 @@ async function connect(first) {
       toast('Se perdió la conexión con el servidor');
       setTimeout(() => location.reload(), 2500);
     }
-  });
+  }, first.code);
   try {
     await net.open;
   } catch {
