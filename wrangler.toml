@@ -1,5 +1,5 @@
 # Despliegue en Cloudflare Workers (ver README, sección "Publicar en Cloudflare").
-name = "ultima-compra"
+name = "terror-game"
 main = "worker/index.js"
 compatibility_date = "2025-09-01"
 
