@@ -137,6 +137,7 @@ export class MonsterView {
   setNet(m) {
     this.target.set(m.p[0], 0, m.p[1]);
     this.targetYaw = m.yaw;
+    this.anger = m.anger || 0;
     if (m.state !== this.state) {
       this.state = m.state;
       this.playFor(this.state);
@@ -170,8 +171,9 @@ export class MonsterView {
 
     if (this.mixer) {
       // Sin animación de correr, acelera la de andar
-      if (this.action && this.state === 'chase' && !this.clips.run) this.action.timeScale = 1.8;
-      else if (this.action) this.action.timeScale = 1;
+      const rage = 1 + 0.3 * (this.anger || 0);
+      if (this.action && this.state === 'chase' && !this.clips.run) this.action.timeScale = 1.8 * rage;
+      else if (this.action) this.action.timeScale = rage;
       this.mixer.update(dt);
       this.groundFeet(dt);
     }
@@ -179,7 +181,8 @@ export class MonsterView {
     const body = this.model || this.placeholder;
     body.rotation.z = Math.sin(time * (speed > 5 ? 9 : 4)) * Math.min(0.06, speed * 0.008);
     // Halo rojo alrededor del monstruo: avisa de que está cerca aunque no lo mires
-    const eyeGlow = this.state === 'chase' ? 6 : 3;
+    // Más rabia (más productos cogidos) = ojos más encendidos
+    const eyeGlow = (this.state === 'chase' ? 6 : 3) * (1 + (this.anger || 0));
     this.faceLight.intensity = eyeGlow * (0.8 + Math.sin(time * 20) * 0.2);
     return moved;
   }

@@ -207,6 +207,7 @@ function startRound(msg) {
   for (const it of items.values()) scene.remove(it.mesh);
   items = new Map();
   emptyCart(myCart);
+  angerLevel = 0;
   for (const r of remotes.values()) emptyCart(r.cart);
   for (const d of msg.items) {
     const mesh = new THREE.Mesh(
@@ -295,6 +296,12 @@ function onSnapshot(msg) {
   if (msg.m && phase === 'playing') {
     monsterTarget = msg.m.target;
     if (!scare) monster.setNet(msg.m);
+    const level = Math.floor((msg.m.anger || 0) * 3 + 1e-6);
+    if (level > angerLevel) {
+      angerLevel = level;
+      toast(['', 'Algo ruge a lo lejos... se está enfadando.', 'El monstruo está furioso. Cada vez oye mejor.', 'Te has llevado todo. Ahora va a por ti con todo.'][Math.min(level, 3)], 3000);
+      audio.roar(monster.root.position.x, monster.root.position.z);
+    }
   } else if (!msg.m) {
     monster.hide();
   }
@@ -488,6 +495,7 @@ function toast(text, ms = 2500) {
 const clock = new THREE.Clock();
 let sendTimer = 0;
 let heartTimer = 0;
+let angerLevel = 0; // 0-3, para avisar cuando el monstruo se enfada más
 let scareTimer = 30;
 let blackout = 0;
 const _v = new THREE.Vector3();
@@ -585,6 +593,21 @@ function updateGameplay(dt, time) {
 }
 
 function updateLamps(dt) {
+  // Bombillas de los pasillos: rachas encendidas o apagadas, con parpadeos al cambiar
+  for (const b of world.bulbs) {
+    b.timer -= dt;
+    if (b.timer <= 0) {
+      b.on = !b.on;
+      b.timer = b.on ? 2 + Math.random() * 7 : 1 + Math.random() * 5;
+      b.flick = 0.6 + Math.random() * 0.6;
+    }
+    b.flick = Math.max(0, b.flick - dt);
+    let k = b.on ? 1 : 0;
+    if (b.flick > 0) k = Math.random() < 0.5 ? 1 : 0.1;
+    else if (b.on && Math.random() < 0.01) k = 0.3; // pequeño bajón de vez en cuando
+    if (blackout > 0) k = 0;
+    b.setLevel(k * (0.85 + Math.random() * 0.15));
+  }
   blackout = Math.max(0, blackout - dt);
   audio.flickerHum(blackout > 0);
   for (const lamp of world.lamps) {
