@@ -154,6 +154,7 @@ export class DinnerView {
     this.gun.visible = false;
     this.gun.scale.setScalar(1.8);
     this.scene.add(this.gun);
+    this.blood = new Blood(this.scene);
   }
 
   // ---- Partida ----
@@ -162,6 +163,7 @@ export class DinnerView {
     this.active = true;
     this.me = myId;
     this.shot = null;
+    this.blood.clear();
     for (const f of this.diners.values()) this.scene.remove(f.group);
     this.diners.clear();
     // El monstruo pasa a este escenario como centinela
@@ -278,20 +280,29 @@ export class DinnerView {
     this.monster.faceLight.intensity = s === 'watching' ? 1.5 : 0.4;
     if (s === 'reading' && Math.random() < dt * 0.25) this.audio.paper(0.12);
 
-    // Comensales: clavan el tenedor, se lo llevan a la boca y caen si les disparan
+    // Comensales: el cuerpo quieto; solo el brazo del tenedor pincha, sube a la boca
+    // y mastican. Si les disparan, se desploman sobre la mesa.
     for (const f of this.diners.values()) {
       const eating = f.data?.eating;
-      f.forkT += ((eating ? 1 : 0) - f.forkT) * Math.min(1, dt * 8);
+      f.forkT += ((eating ? 1 : 0) - f.forkT) * Math.min(1, dt * 7);
       f.stab = Math.max(0, (f.stab || 0) - dt * 5);
       const jab = Math.sin(f.stab * Math.PI);
-      f.fork.position.set(0.16, 0.86 + f.forkT * 0.5 - jab * 0.12, -0.3 + f.forkT * 0.12 - jab * 0.12);
-      f.fork.rotation.x = -0.9 + f.forkT * 1.6 - jab * 0.5;
+      const t = f.forkT;
+      f.arm.rotation.set(ARM_REST.x + (ARM_EAT.x - ARM_REST.x) * t - jab * 0.3, 0, ARM_REST.z + (ARM_EAT.z - ARM_REST.z) * t);
+      // Boca: se abre al acercar el tenedor y mastica mientras come
+      const chew = eating && t > 0.7 ? 0.5 + 0.5 * Math.sin(time * 18 + f.phase) : t * 0.3;
+      f.mouth.scale.y = 0.4 + chew * 1.6;
+      f.jaw.position.y = -0.085 - chew * 0.012;
       const fall = f.dead ? 1 : 0;
-      f.body.rotation.x += (fall * -1.0 - f.body.rotation.x) * Math.min(1, dt * 6);
-      if (f.dead) f.fork.visible = false;
-      if (f.data?.place) f.mat.emissive?.setHex(0x113311);
+      f.upper.rotation.x += (fall * -1.05 - f.upper.rotation.x) * Math.min(1, dt * 6);
+      if (f.dead) {
+        f.fork.visible = false;
+        f.mouth.scale.y = 1.2;
+      }
+      if (f.data?.place) f.shirt.emissive?.setHex(0x113311);
     }
 
+    this.blood.update(dt);
     if (this.shot) {
       this.updateShot(dt);
       return;
@@ -321,31 +332,89 @@ export class DinnerView {
     sh.t += dt * 1000;
     const p = sh.t / DINNER.shotMs;
     const victims = sh.victims.map((id) => this.diners.get(id)).filter(Boolean);
-    const target = victims[0] ? victims[0].head.getWorldPosition(new THREE.Vector3()) : this.camera.position;
+    const v = victims[0];
+    const head = v ? v.head.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3(-0.55, 1.3, 0);
+    if (!sh.from) sh.from = head.clone(); // dónde estaba la cabeza antes de caer
     const iAmHit = sh.victims.includes(this.me);
     const el = document.getElementById('scare');
-    // La cámara se acerca un poco a la escena
-    this.placeCamera(this.look.yaw * (1 - Math.min(1, p * 3)), 0, Math.min(1, p * 3) * 0.6);
+    const FIRE = 0.3;
+    document.getElementById('cine').classList.toggle('on', p < 0.93);
+    document.getElementById('dinner-ui').classList.toggle('cine', p < 0.97);
+
+    // Plano de cine: de frente a la víctima, con el centinela y la pistola de lado
+    const toS = new THREE.Vector3(SENTINEL.x - sh.from.x, 0, SENTINEL.z - sh.from.z).normalize();
+    const toCenter = new THREE.Vector3(0, 0, -Math.sign(sh.from.z || 1));
+    const close = sh.from.clone().addScaledVector(toCenter, 0.8).addScaledVector(toS, 1.15);
+    close.y = sh.from.y + 0.45;
+    const ease = (x) => x * x * (3 - 2 * x);
+    // Antes del disparo: por encima del hombro del centinela, la pistola apuntando
+    const gunHand = new THREE.Vector3(SENTINEL.x + 0.5, 1.45, 0);
+    const aim = sh.from.clone().sub(gunHand).normalize();
+    const shoulder = gunHand.clone().addScaledVector(aim, -0.85);
+    shoulder.y += 0.5;
+    shoulder.z -= Math.sign(sh.from.z || 1) * 0.35;
+    let blend, zoom, pos, look;
+    if (p < FIRE) {
+      blend = ease(Math.min(1, p / 0.15));
+      zoom = ease(Math.min(1, p / FIRE)) * 0.6;
+      pos = shoulder;
+      look = sh.from;
+    } else if (p < 0.78) {
+      blend = 1;
+      zoom = ease(Math.min(1, (p - FIRE) / 0.4)); // tras el disparo, zoom lento sobre la víctima
+      pos = close;
+      look = head.clone().lerp(sh.from, 0.5);
+    } else {
+      blend = 1 - ease((p - 0.78) / 0.22);
+      zoom = blend;
+      pos = close;
+      look = head.clone().lerp(sh.from, 0.5);
+    }
+    this.placeCamera(this.look.yaw * (1 - blend), this.look.pitch * (1 - blend), 0);
+    const over = this.camera.position.clone();
+    this.camera.position.lerpVectors(over, pos, blend);
+    const lookOver = new THREE.Vector3(-1.1, 1.0, 0);
+    this.camera.lookAt(lookOver.lerp(look, blend));
+    this.camera.fov = 70 - zoom * 18;
+    // Temblor del disparo
+    const since = sh.t - DINNER.shotMs * FIRE;
+    if (since > 0 && since < 350) {
+      const k = (1 - since / 350) * 0.05;
+      this.camera.position.x += (Math.random() - 0.5) * k;
+      this.camera.position.y += (Math.random() - 0.5) * k;
+    }
+    this.camera.updateProjectionMatrix();
+
     this.gun.visible = true;
-    this.aimGun(target);
-    if (p < 0.4) {
+    this.aimGun(sh.from);
+    if (p < FIRE) {
       // La pistola sube despacio hacia la víctima
-      this.gun.position.y -= (1 - p / 0.4) * 0.4;
+      this.gun.position.y -= (1 - p / FIRE) * 0.4;
     } else if (!sh.fired) {
       sh.fired = true;
       this.audio.gunshot(iAmHit ? 1.2 : 0.9);
       this.flash.visible = true;
-      for (const f of victims) f.dead = true;
+      for (const f of victims) {
+        f.dead = true;
+        const h = f.head.getWorldPosition(new THREE.Vector3());
+        const dir = h.clone().sub(this.gun.position).normalize();
+        this.blood.burst(h, dir);
+        this.blood.splatAround(f.group.position, f.group.rotation.y);
+      }
       el.classList.remove('hidden');
       el.style.background = iAmHit ? 'rgba(255,255,255,0.95)' : 'rgba(255,240,200,0.5)';
     } else {
-      this.flash.visible = sh.t - DINNER.shotMs * 0.4 < 80;
-      const q = Math.min(1, (p - 0.4) / 0.3);
-      el.style.background = iAmHit ? `rgba(${160 - q * 100},0,0,${0.6 - q * 0.25})` : `rgba(255,240,200,${Math.max(0, 0.5 - q)})`;
+      this.flash.visible = since < 80;
+      const q = Math.min(1, (p - FIRE) / 0.3);
+      el.style.background = iAmHit ? `rgba(${160 - q * 100},0,0,${0.6 - q * 0.3})` : `rgba(255,240,200,${Math.max(0, 0.5 - q * 2)})`;
     }
     if (sh.t >= DINNER.shotMs) {
       el.classList.add('hidden');
       el.style.background = '';
+      document.getElementById('cine').classList.remove('on');
+      document.getElementById('dinner-ui').classList.remove('cine');
+      this.camera.fov = 70;
+      this.camera.updateProjectionMatrix();
       this.gun.visible = false;
       this.flash.visible = false;
       this.shot = null;
@@ -360,6 +429,100 @@ export class DinnerView {
 }
 
 // ---- Piezas ----
+
+// Mancha de sangre hecha de cuadraditos, como un charco pixelado
+function pixelBlob(mat) {
+  const g = new THREE.Group();
+  const geo = new THREE.PlaneGeometry(0.2, 0.2);
+  for (let x = -2; x <= 2; x++) {
+    for (let y = -2; y <= 2; y++) {
+      const d = Math.hypot(x, y);
+      if (d > 2.4 || (d > 1.4 && Math.random() < 0.5)) continue;
+      const q = new THREE.Mesh(geo, mat);
+      q.position.set(x * 0.2, y * 0.2, 0);
+      g.add(q);
+    }
+  }
+  return g;
+}
+
+// Sangre pixelada: gotas cúbicas que salen de la cabeza y se quedan en la mesa,
+// y manchas que crecen sobre el mantel y el plato.
+class Blood {
+  constructor(scene) {
+    this.scene = scene;
+    this.max = 160;
+    this.drops = new THREE.InstancedMesh(new THREE.BoxGeometry(0.022, 0.022, 0.022), new THREE.MeshLambertMaterial({ color: 0x8a0a0a }), this.max);
+    this.drops.count = 0;
+    this.drops.frustumCulled = false;
+    scene.add(this.drops);
+    this.parts = [];
+    this.splats = [];
+    this.splatMat = new THREE.MeshLambertMaterial({ color: 0x6e0606, polygonOffset: true, polygonOffsetFactor: -2 });
+    this.m = new THREE.Matrix4();
+  }
+
+  clear() {
+    this.parts = [];
+    this.drops.count = 0;
+    for (const s of this.splats) this.scene.remove(s.mesh);
+    this.splats = [];
+  }
+
+  burst(at, dir) {
+    for (let i = 0; i < 70 && this.parts.length < this.max; i++) {
+      const sp = 1.2 + Math.random() * 2.6;
+      this.parts.push({
+        p: at.clone(),
+        v: new THREE.Vector3(dir.x * sp + (Math.random() - 0.5) * 1.6, 0.6 + Math.random() * 1.8, dir.z * sp + (Math.random() - 0.5) * 1.6),
+        s: 0.5 + Math.random() * 1.1,
+        rest: false,
+      });
+    }
+  }
+
+  // Charcos sobre la mesa delante de la víctima y salpicaduras en su comida
+  splatAround(pos, yaw) {
+    const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)); // hacia la mesa
+    const spots = [[0.85, 0, 0.5], [0.7, 0.32, 0.3], [0.78, -0.34, 0.32], [0.45, 0.3, 0.2], [1.0, 0.2, 0.22], [0.5, -0.3, 0.18], [0.95, -0.25, 0.2]];
+    for (const [ahead, side, size] of spots) {
+      const mesh = pixelBlob(this.splatMat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.rotation.z = Math.random() * Math.PI;
+      const x = pos.x + fwd.x * ahead + fwd.z * side, z = pos.z + fwd.z * ahead - fwd.x * side;
+      mesh.position.set(x, TABLE_Y + 0.004, z);
+      mesh.scale.setScalar(0.001);
+      this.scene.add(mesh);
+      this.splats.push({ mesh, size: size * 0.7 * (0.8 + Math.random() * 0.4), t: -Math.random() * 0.25 });
+    }
+  }
+
+  update(dt) {
+    for (const s of this.splats) {
+      if (s.t >= 1) continue;
+      s.t += dt * 2.5;
+      s.mesh.scale.setScalar(Math.max(0.001, Math.min(1, s.t) * s.size));
+    }
+    let n = 0;
+    for (const q of this.parts) {
+      if (!q.rest) {
+        q.v.y -= 9.8 * dt;
+        q.p.addScaledVector(q.v, dt);
+        const onTable = Math.abs(q.p.x + 0.55) < 2.1 && Math.abs(q.p.z) < 0.75;
+        const floor = onTable ? TABLE_Y + 0.012 : 0.01;
+        if (q.p.y <= floor && (onTable || q.p.y < 0.2)) {
+          q.p.y = floor;
+          q.rest = true;
+        }
+      }
+      this.m.makeScale(q.s, q.rest ? 0.25 : q.s, q.s).setPosition(q.p);
+      this.drops.setMatrixAt(n++, this.m);
+    }
+    this.drops.count = n;
+    this.drops.instanceMatrix.needsUpdate = true;
+  }
+}
+
 
 function buildFork() {
   const g = new THREE.Group();
@@ -392,22 +555,62 @@ function setForkPeas(fork, n) {
   fork.userData.peas.count = Math.min(n, 32); // el montón no crece más allá de esto
 }
 
+// Brazo derecho: en reposo apunta al plato; comiendo, lleva el tenedor a la boca
+const ARM_REST = { x: 0.95, z: 0 };
+const ARM_EAT = { x: 2.35, z: -0.62 };
+const SKINS = [0xe8b896, 0xc68a5e, 0xf1cfb0, 0x8d5a3b];
+const HAIRS = [0x3a2414, 0x111111, 0xd9a443, 0x6b3a1f];
+
+// Comensal de bloques, estilo Minecraft: cabeza cúbica con cara pixelada
 function buildDiner(seat, info = {}, isMe = false) {
+  const n = Math.max(0, SEATS.indexOf(seat));
   const group = new THREE.Group();
   group.position.set(seat.x, 0, seat.z);
   group.rotation.y = seat.face < 0 ? 0 : Math.PI;
-  const mat = new THREE.MeshLambertMaterial({ color: info.color ?? 0x888888 });
-  const body = new THREE.Group();
-  body.position.y = 0.5;
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.45, 4, 8), mat);
-  torso.position.y = 0.35;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 10), mat);
-  head.position.y = 0.82;
-  body.add(torso, head);
-  group.add(body);
+  const shirt = new THREE.MeshLambertMaterial({ color: info.color ?? 0x888888 });
+  const skin = new THREE.MeshLambertMaterial({ color: SKINS[n] });
+  const hair = new THREE.MeshLambertMaterial({ color: HAIRS[n] });
+  const pants = new THREE.MeshLambertMaterial({ color: 0x2b3448 });
+  const box = (w, h, d, mat, x, y, z, parent) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z);
+    parent.add(m);
+    return m;
+  };
+  // Piernas sentadas (casi todo queda bajo la mesa)
+  for (const sx of [-0.1, 0.1]) {
+    box(0.15, 0.14, 0.42, pants, sx, 0.52, -0.14, group);
+    box(0.14, 0.45, 0.14, pants, sx, 0.25, -0.3, group);
+  }
+  // Tronco, cabeza y brazos giran juntos desde la cadera si le disparan
+  const upper = new THREE.Group();
+  upper.position.y = 0.6;
+  group.add(upper);
+  box(0.42, 0.5, 0.24, shirt, 0, 0.27, 0, upper);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.32, 0.32), [hair, hair, hair, skin, hair, faceMaterial(SKINS[n], HAIRS[n], n)]);
+  head.position.y = 0.7;
+  upper.add(head);
+  // Boca que se abre y mastica, y mandíbula para que se note
+  const mouth = box(0.1, 0.03, 0.01, new THREE.MeshBasicMaterial({ color: 0x3a0d0d }), 0, -0.07, -0.162, head);
+  const jaw = box(0.2, 0.04, 0.02, skin, 0, -0.085, -0.155, head);
+  jaw.visible = false;
+  // Brazo izquierdo apoyado; el derecho sostiene el tenedor
+  const left = new THREE.Group();
+  left.position.set(-0.27, 0.47, 0);
+  left.rotation.x = 1.2;
+  upper.add(left);
+  box(0.12, 0.42, 0.12, shirt, 0, -0.17, 0, left);
+  box(0.11, 0.08, 0.11, skin, 0, -0.41, 0, left);
+  const arm = new THREE.Group();
+  arm.position.set(0.27, 0.47, 0);
+  upper.add(arm);
+  box(0.12, 0.42, 0.12, shirt, 0, -0.17, 0, arm);
+  box(0.11, 0.08, 0.11, skin, 0, -0.41, 0, arm);
   const fork = buildFork();
   fork.scale.setScalar(1.6);
-  group.add(fork);
+  fork.position.set(0, -0.44, -0.04);
+  fork.rotation.x = -Math.PI / 2 + 0.5;
+  arm.add(fork);
   // Nombre encima
   const c = document.createElement('canvas');
   c.width = 256;
@@ -415,14 +618,52 @@ function buildDiner(seat, info = {}, isMe = false) {
   const g = c.getContext('2d');
   g.font = 'bold 34px sans-serif';
   g.textAlign = 'center';
-  g.fillStyle = 'rgba(255,255,255,0.85)';
   g.fillStyle = isMe ? 'rgba(255,230,120,0.95)' : 'rgba(255,255,255,0.85)';
   g.fillText(isMe ? `TÚ · ${info.name ?? ''}` : info.name ?? '', 128, 44);
   const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
   label.scale.set(0.8, 0.2, 1);
-  label.position.y = 1.65;
+  label.position.y = 1.72;
   group.add(label);
-  return { group, body, head, mat, fork, forkT: 0, dead: false, data: null };
+  return { group, upper, head, arm, mouth, jaw, shirt, fork, forkT: 0, phase: n * 1.7, dead: false, data: null };
+}
+
+// Cara pixelada de 16x16: pelo, cejas, ojos con pupila y mejillas
+function faceMaterial(skinHex, hairHex, n) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 16;
+  const g = c.getContext('2d');
+  const hex = (h) => '#' + h.toString(16).padStart(6, '0');
+  g.fillStyle = hex(skinHex);
+  g.fillRect(0, 0, 16, 16);
+  g.fillStyle = hex(hairHex);
+  g.fillRect(0, 0, 16, 4);
+  g.fillRect(0, 4, 2, 3 + (n % 2) * 3);
+  g.fillRect(14, 4, 2, 3 + (n % 2) * 3);
+  if (n === 2) g.fillRect(2, 4, 5, 1); // flequillo
+  // Cejas
+  g.fillRect(3, 6, 3, 1);
+  g.fillRect(10, 6, 3, 1);
+  // Ojos: blanco y pupila (miran un poco hacia el centinela)
+  g.fillStyle = '#ffffff';
+  g.fillRect(3, 7, 3, 2);
+  g.fillRect(10, 7, 3, 2);
+  g.fillStyle = n === 1 ? '#3b7a3b' : '#2b4d8c';
+  g.fillRect(3, 7, 2, 2);
+  g.fillRect(10, 7, 2, 2);
+  g.fillStyle = '#111111';
+  g.fillRect(3, 8, 1, 1);
+  g.fillRect(10, 8, 1, 1);
+  // Nariz y mejillas
+  g.fillStyle = 'rgba(0,0,0,0.18)';
+  g.fillRect(7, 9, 2, 2);
+  g.fillStyle = 'rgba(220,80,80,0.3)';
+  g.fillRect(2, 10, 2, 1);
+  g.fillRect(12, 10, 2, 1);
+  const tex = new THREE.CanvasTexture(c);
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.MeshLambertMaterial({ map: tex });
 }
 
 function canvasTexture(size, draw) {

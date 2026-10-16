@@ -84,16 +84,20 @@ $('btn-start').onclick = () => {
   net.send({ t: 'start' });
 };
 $('btn-again').onclick = () => net.send({ t: 'start' });
-$('btn-share').onclick = async () => {
+async function shareRoom(btn, label) {
   const url = `${location.origin}${location.pathname}?sala=${roomCode}`;
   try {
     if (navigator.share && isTouch) await navigator.share({ title: 'Última Compra', url });
     else await navigator.clipboard.writeText(url);
-    $('btn-share').textContent = 'Enlace copiado';
+    btn.textContent = 'Enlace copiado';
   } catch {
-    $('btn-share').textContent = url;
+    btn.textContent = url;
   }
-};
+  if (label) setTimeout(() => (btn.textContent = label), 2500);
+}
+$('btn-share').onclick = () => shareRoom($('btn-share'));
+// En la cena el código de sala queda a la vista para invitar a más gente
+$('d-room').onclick = () => shareRoom($('d-room'), `Sala ${roomCode} · Invitar`);
 
 // ---- Elegir juego (lo decide el anfitrión) ----
 const MODE_TEXT = {
@@ -159,6 +163,7 @@ function onMessage(msg) {
       $('menu-lobby').classList.remove('hidden');
       $('lobby-code').textContent = msg.code;
       $('room-tag').textContent = `Sala ${msg.code}`;
+      $('d-room').textContent = `Sala ${msg.code} · Invitar`;
       history.replaceState(null, '', `?sala=${msg.code}`);
       break;
     case 'lobby': {
