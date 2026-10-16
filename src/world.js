@@ -9,7 +9,7 @@ export function buildWorld(scene, { lowQuality }) {
   // Niebla: empieza a espesar a ~9 m y es opaca hacia los 32 m (ver documento de diseño)
   scene.fog = new THREE.Fog(FOG_COLOR, lowQuality ? 7 : 9, lowQuality ? 30 : 34);
 
-  scene.add(new THREE.HemisphereLight(0x8a96a8, 0x2a2018, 0.55));
+  scene.add(new THREE.HemisphereLight(0x6a7488, 0x1a1410, 0.05));
 
   // Suelo de baldosas y techo
   const floorTex = canvasTexture(256, (g, s) => {
@@ -56,7 +56,7 @@ export function buildWorld(scene, { lowQuality }) {
   // Obstáculos
   const mats = {
     wall: new THREE.MeshLambertMaterial({ map: wallpaperTexture() }),
-    fridge: new THREE.MeshLambertMaterial({ map: fridgeTexture(), emissive: 0x9fd8ff, emissiveIntensity: 0.18 }),
+    fridge: new THREE.MeshLambertMaterial({ map: fridgeTexture(), emissive: 0x9fd8ff, emissiveIntensity: 0.07 }),
     crate: new THREE.MeshLambertMaterial({ map: crateTexture() }),
     checkout: new THREE.MeshLambertMaterial({ color: 0x3a3f46 }),
     promo: new THREE.MeshLambertMaterial({ color: 0xb0281e }),
@@ -108,7 +108,7 @@ export function buildWorld(scene, { lowQuality }) {
 
 function buildLamps(scene, lowQuality) {
   const panelGeo = new THREE.BoxGeometry(0.4, 0.06, 2.4);
-  const panelOn = new THREE.MeshBasicMaterial({ color: 0xe8f0ff });
+  const panelOn = new THREE.MeshBasicMaterial({ color: 0x9aa2b0 });
   const panelOff = new THREE.MeshBasicMaterial({ color: 0x222222 });
   const lamps = [];
   const spots = [];
@@ -127,7 +127,7 @@ function buildLamps(scene, lowQuality) {
     scene.add(panel);
     let light = null;
     if (lit.has(i)) {
-      light = new THREE.PointLight(0xdfe8ff, 14, 13, 1.6);
+      light = new THREE.PointLight(0xdfe8ff, 3, 8, 1.8);
       light.position.set(s.x, CEILING - 0.4, s.z);
       scene.add(light);
     }

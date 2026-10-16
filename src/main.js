@@ -311,7 +311,7 @@ function addRemote(p) {
   group.add(nameSprite(p.name));
   let light = null;
   if (!isTouch) {
-    light = new THREE.SpotLight(0xfff2d8, 20, 18, 0.42, 0.5, 1.5);
+    light = new THREE.SpotLight(0xfff2d8, 45, 28, 0.48, 0.4, 1.3);
     light.position.set(0, 1.5, 0.2);
     light.target.position.set(0, 1.2, 3);
     group.add(light, light.target);
@@ -359,7 +359,7 @@ function updateRemotes(dt) {
     r.group.scale.y += ((r.crouch ? 0.65 : 1) - r.group.scale.y) * k;
     r.mat.opacity = r.alive ? 1 : 0.2;
     placeCart(r.cart, r.group.position, r.group.rotation.y, r.alive);
-    if (r.light) r.light.intensity = r.alive && r.lightOn ? 20 : 0;
+    if (r.light) r.light.intensity = r.alive && r.lightOn ? 45 : 0;
     // Pasos de los compañeros, en 3D
     if (r.alive) {
       r.stepDist += before.distanceTo(r.group.position);
